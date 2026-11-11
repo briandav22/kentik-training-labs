@@ -1,0 +1,8 @@
+# Credentials never go in this repo. A student's API token lives in ~/.kentik.env on their host.
+.env
+*.env
+.kentik.env
+
+__pycache__/
+*.pyc
+.DS_Store
