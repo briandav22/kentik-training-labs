@@ -45,7 +45,10 @@ class Engine:
         """Send one interval's flows. Returns the number of records sent."""
         collector = (st.get("collector", "127.0.0.1"), int(st["port"]))
         sent = 0
-        for device, records in traffic.generate(interval, now, self.rng).items():
+        flows = traffic.generate(interval, now, self.rng)
+        for device, records in traffic.scenario(st, interval, now, self.rng).items():
+            flows[device] = flows.get(device, []) + records
+        for device, records in flows.items():
             self.true_bits[device] += traffic.bits(records)
             records = traffic.sample(records, int(st["sample"].get(device, 1)), self.rng)
             self.sent_bits[device] += traffic.bits(records)

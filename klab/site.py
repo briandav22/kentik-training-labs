@@ -23,8 +23,8 @@ DEVICES = {
 
 # group -> (label, subnet, host count, offsets that must exist)
 GROUPS = {
-    "hq_users":     ("HQ users", "10.1.20.0/24", 40, (15,)),        # laptop-07 is 10.1.20.15
-    "branch_users": ("Branch users", "10.2.20.0/24", 15, ()),
+    "hq_users":     ("HQ users", "10.1.20.0/24", 40, (15, 77)),     # laptop-07 is .15; .77 is the laptop in the DNS case
+    "branch_users": ("Branch users", "10.2.20.0/24", 15, (44,)),    # .44 is the overnight visitor
 }
 
 # service -> (label, ip, port, protocol, where it lives, request (pkts, bytes/pkt), reply (pkts, bytes/pkt), weight)
@@ -44,7 +44,18 @@ PATHS = {
     ("hq_users", "servers"):      [("core-sw-01", 12, 20)],
     ("branch_users", "internet"): [("branch-rtr-01", 2, 1), ("edge-rtr-01", 3, 2)],
     ("branch_users", "servers"):  [("branch-rtr-01", 2, 1), ("edge-rtr-01", 3, 5), ("core-sw-01", 49, 20)],
+    ("internet", "servers"):      [("edge-rtr-01", 2, 5), ("core-sw-01", 49, 20)],
+    ("servers", "internet"):      [("core-sw-01", 20, 49), ("edge-rtr-01", 5, 2)],
 }
+
+# The cast of the cases. Outside addresses are from the documentation ranges.
+WEB_SERVER = "10.1.60.10"        # web-01, the target in "under attack"
+DB_SERVER = "10.1.60.40"         # db-01
+UPDATE_SERVER = "192.0.2.80"
+TRAIL_LAPTOP = "10.1.20.77"
+BAD_HOST = "203.0.113.66"        # what update-cdn[.]example resolves to
+SCANNER = "10.2.20.44"
+COLD_DEST = "198.51.100.200"
 
 
 def hosts(group: str) -> List[str]:

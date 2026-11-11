@@ -9,7 +9,7 @@ import unittest
 
 os.environ["KLAB_HOME"] = tempfile.mkdtemp(prefix="klab-test-")
 
-from klab import cli, labs, netflow, site, state, traffic   # noqa: E402
+from klab import cli, labs, netflow, site, snmp, state, traffic   # noqa: E402
 from klab.engine import Engine                               # noqa: E402
 
 
@@ -139,7 +139,9 @@ class EngineTest(unittest.TestCase):
 
 class LabsTest(unittest.TestCase):
     def test_each_fault_changes_exactly_what_it_should(self):
-        want = {1: {}, 2: {"port": 2055}, 3: {"source": "edge-rtr-01"}, 4: {"firewall": True}, 5: {"sample": "core-sw-01"}}
+        want = {1: {}, 2: {"port": 2055}, 3: {"source": "edge-rtr-01"}, 4: {"firewall": True}, 5: {"sample": "core-sw-01"},
+                6: {"scenario": 1}, 7: {"scenario": 1}, 8: {"scenario": 1}, 9: {"scenario": 1}, 10: {"scenario": 1},
+                11: {"snmp": True}}
         for n, lab in labs.LABS.items():
             st, base = state.baseline(), state.baseline()
             lab["fault"](st)
@@ -155,11 +157,17 @@ class LabsTest(unittest.TestCase):
             self.assertTrue(labs.answer(0, topic))
 
     def test_ticket_and_status_never_give_the_fault_away(self):
-        giveaways = {2: ["2055"], 3: ["10.1.1.1", "GigabitEthernet0/0/4"], 4: ["iptables", "DROP"], 5: ["100", "sampl"]}
+        giveaways = {2: ["2055"], 3: ["10.1.1.1", "GigabitEthernet0/0/4"], 4: ["iptables", "DROP"], 5: ["100", "sampl"],
+                     6: [site.UPDATE_SERVER, "update", "storm"], 7: [site.DB_SERVER, "5432", "trail"],
+                     8: ["udp", "port 53", "flood", "reflection"], 9: [site.SCANNER, "scan"],
+                     10: [site.COLD_DEST, site.DB_SERVER, "db-01", "port 22", "cold\""],
+                     11: [snmp.COMMUNITY]}
         for n, words in giveaways.items():
             st = state.baseline()
             st["lab"] = n
             labs.LABS[n]["fault"](st)
+            if st.get("scenario"):
+                st["scenario"].update(start=0, end=2e10)
             state.save(st)
             text = run("ticket")[1] + run("status")[1] + run("labs")[1] + run("hint")[1]
             for w in words:
@@ -169,6 +177,103 @@ class LabsTest(unittest.TestCase):
         self.assertIn("10.1.0.1", labs.answer(3, "ips"))            # what she believes, not what the router does
         self.assertNotIn("2055", labs.answer(2, "port"))
         self.assertIn("100", labs.answer(5, "sampling"))            # but she tells the truth when asked the right thing
+
+
+class ScenarioTest(unittest.TestCase):
+    def run_case(self, name, seconds=120, age=0):
+        rng, now = random.Random(7), 1_800_000_000.0
+        st = {"scenario": {"name": name, "start": now - age, "end": now + 9999}}
+        out = {}
+        for i in range(seconds):
+            for dev, recs in traffic.scenario(st, 1.0, now + i, rng).items():
+                out.setdefault(dev, []).extend(recs)
+        return out
+
+    def test_the_laptop_checks_in_even_with_no_case_open(self):
+        rng, hits = random.Random(8), 0
+        for i in range(3600):
+            for recs in traffic.scenario({"scenario": None}, 1.0, 1e9 + i, rng).values():
+                hits += sum(1 for r in recs if r["src"] == site.TRAIL_LAPTOP and r["dst"] == site.BAD_HOST)
+        self.assertTrue(10 <= hits <= 80, hits)          # about every four minutes, seen on two devices
+
+    def test_storm_is_everyone_pulling_from_one_server(self):
+        edge = [r for r in self.run_case("storm")["edge-rtr-01"] if r["src"] == site.UPDATE_SERVER]
+        self.assertGreater(len({r["dst"] for r in edge}), 40)
+        self.assertGreater(8 * sum(r["bytes"] for r in edge) / 120.0, 20e6)      # tens of Mbps, far above everyday
+
+    def test_trail_talks_to_the_database_then_uploads(self):
+        early = self.run_case("trail", seconds=170)
+        self.assertTrue(any(r["dst"] == site.DB_SERVER and r["dport"] == 5432 for r in early["core-sw-01"]))
+        late = [r for r in self.run_case("trail", seconds=60, age=300)["edge-rtr-01"]
+                if r["src"] == site.TRAIL_LAPTOP and r["dst"] == site.BAD_HOST]
+        self.assertGreater(sum(r["bytes"] for r in late), 30e6)
+
+    def test_flood_is_many_sources_one_target_one_kind_of_packet(self):
+        recs = [r for r in self.run_case("flood", seconds=20)["edge-rtr-01"] if r["dst"] == site.WEB_SERVER]
+        self.assertGreater(len({r["src"] for r in recs}), 300)
+        self.assertEqual({(r["proto"], r["sport"]) for r in recs}, {(17, 53)})
+        self.assertEqual({(r["in_if"], r["out_if"]) for r in recs}, {(2, 5)})     # in from the ISP
+
+    def test_scan_is_one_source_many_ports_one_packet_each(self):
+        recs = [r for r in self.run_case("scan", seconds=60)["core-sw-01"] if r["src"] == site.SCANNER]
+        self.assertGreater(len({r["dport"] for r in recs}), 500)
+        self.assertEqual({r["pkts"] for r in recs}, {1})
+        self.assertTrue(all(r["flags"] == traffic.SYN for r in recs))
+
+    def test_cold_case_is_a_server_sending_out_on_port_22(self):
+        recs = [r for r in self.run_case("cold", seconds=30)["edge-rtr-01"] if r["src"] == site.DB_SERVER]
+        self.assertEqual({(r["dst"], r["dport"]) for r in recs}, {(site.COLD_DEST, 22)})
+        self.assertEqual({(r["in_if"], r["out_if"]) for r in recs}, {(5, 2)})     # out to the ISP
+
+    def test_a_case_sends_nothing_before_it_starts_or_after_it_ends(self):
+        st = {"scenario": {"name": "flood", "start": 2000.0, "end": 3000.0}}
+        rng = random.Random(9)
+        for now in (1000.0, 3500.0):
+            recs = sum((v for v in traffic.scenario(st, 1.0, now, rng).values()), [])
+            self.assertFalse([r for r in recs if r["dst"] == site.WEB_SERVER])
+
+    def test_case_addresses_follow_the_course_rules(self):
+        import ipaddress
+        docs = [ipaddress.ip_network(n) for n in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24")]
+        for ip in (site.UPDATE_SERVER, site.BAD_HOST, site.COLD_DEST):
+            self.assertTrue(any(ipaddress.ip_address(ip) in n for n in docs), ip)
+        self.assertIn(site.TRAIL_LAPTOP, site.hosts("hq_users"))
+        self.assertIn(site.SCANNER, site.hosts("branch_users"))
+
+
+class SnmpTest(unittest.TestCase):
+    def test_request_is_a_v2c_get_for_the_host_name(self):
+        pkt = snmp.get_request("kentik-ro")
+        self.assertEqual(pkt[0], 0x30)
+        self.assertIn(b"kentik-ro", pkt)
+        self.assertIn(bytes([0x06, 0x08, 0x2B, 6, 1, 2, 1, 1, 5, 0]), pkt)      # 1.3.6.1.2.1.1.5.0
+        self.assertIn(b"\xa0", pkt)                                              # a GetRequest
+
+    def test_asks_a_responder_and_reads_its_answer(self):
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("127.0.0.1", 0))
+        self.addCleanup(srv.close)
+
+        def serve():
+            pkt, addr = srv.recvfrom(4096)
+            if b"right" not in pkt:
+                return                                                            # a real agent stays silent
+            vb = snmp._tlv(0x30, snmp._oid(snmp.SYS_NAME) + snmp._tlv(0x04, b"lab-host"))
+            pdu = snmp._tlv(0xA2, snmp._int(1) + snmp._int(0) + snmp._int(0) + snmp._tlv(0x30, vb))
+            srv.sendto(snmp._tlv(0x30, snmp._int(1) + snmp._tlv(0x04, b"right") + pdu), addr)
+
+        import threading
+        for community, want in (("right", "lab-host"), ("wrong", None)):
+            t = threading.Thread(target=serve)
+            t.start()
+            self.assertEqual(snmp.test(community, port=srv.getsockname()[1], timeout=0.5), want)
+            if want is None:
+                snmp.test("right", port=srv.getsockname()[1], timeout=0.5)       # let the responder finish
+            t.join()
+
+    def test_the_customer_gives_the_old_string_first(self):
+        self.assertIn(snmp.WRONG_COMMUNITY, labs.answer(11, "snmp"))
+        self.assertIn(snmp.COMMUNITY, labs.answer(11, "changes"))
 
 
 class CliTest(unittest.TestCase):
