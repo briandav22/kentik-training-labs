@@ -8,7 +8,7 @@ Python 3.8 or later, standard library only. Nothing to install.
 
 ## Before you start
 
-- A Linux host (2 CPUs, 2 GB of memory is enough) with `python3`, `git`, `iproute2`, `iptables` and `tcpdump`.
+- A Linux host (2 CPUs, 2 GB of memory is enough) with `python3`, `git`, `iproute2`, `iptables`, `tcpdump` and, for lab 11, `snmpd`. On a fresh Ubuntu or Debian machine, `sudo bash setup-host.sh` installs them all. It works the same on any provider.
 - The Kentik Universal Agent installed on that host from your own portal. It listens for flow on UDP 9995.
 
 ## Run it
