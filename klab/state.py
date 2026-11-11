@@ -19,7 +19,9 @@ def baseline() -> Dict:
     return {"lab": 0, "collector": "127.0.0.1", "port": site.AGENT_PORT,
             "source": {d: "ip" for d in site.DEVICES},       # "ip" (the Flow IP) or "other_ip"
             "sample": {d: 1 for d in site.DEVICES},
-            "firewall": False, "bind": True}
+            "firewall": False, "bind": True,
+            "scenario": None,                                  # {"name", "start", "end"}: a case's extra traffic
+            "snmp": False}
 
 
 def load() -> Dict:

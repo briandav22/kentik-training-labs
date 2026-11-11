@@ -8,7 +8,7 @@ import sys
 import time
 from typing import Dict, List, Optional
 
-from . import labs, netflow, site, state, system
+from . import labs, netflow, site, snmp, state, system, traffic
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,8 +74,17 @@ def cmd_down(args) -> int:
     pid = _pid()
     if pid:
         os.kill(pid, signal.SIGTERM)
+        for _ in range(50):                 # wait for the sender to go, so "nothing is left" is true
+            if not _pid():
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, signal.SIGKILL)
+            time.sleep(0.2)
     st = state.load()
     problem = system.firewall(int(st["port"]), False) or system.firewall(site.AGENT_PORT, False)
+    if st.get("snmp"):
+        problem = snmp.configure(False) or problem
     system.aliases(remove=True)
     state.save(state.baseline())
     for name in ("sender.pid", "stats.json"):
@@ -101,6 +110,20 @@ def cmd_start(args) -> int:
     st["lab"] = args.lab
     if args.lab:
         labs.LABS[args.lab]["fault"](st)
+    if st.get("scenario"):
+        name = st["scenario"]["name"]
+        delay = (args.after if args.after is not None else 360) * 60 if name == "scan" else 0
+        begin = time.time() + delay
+        st["scenario"].update(start=begin, end=begin + 60 * traffic.SCENARIO_MINUTES[name])
+    if st.get("snmp") or old.get("snmp"):
+        if st.get("snmp") and not snmp.installed():
+            print("This lab needs the snmpd package on this host. Install it, then run this again:\n"
+                  "  sudo apt-get install -y snmpd", file=sys.stderr)
+            return 1
+        problem = snmp.configure(bool(st.get("snmp")))
+        if problem:
+            print("snmpd: " + problem, file=sys.stderr)
+            return 1
     problem = system.firewall(int(old["port"]), False) or system.firewall(site.AGENT_PORT, st["firewall"])
     if problem:
         print(problem, file=sys.stderr)
@@ -110,8 +133,53 @@ def cmd_start(args) -> int:
         print("Note: the lab network isn't running yet. Start it with: sudo python3 lab.py up")
     if args.lab == 0:
         print("Back to a healthy network: every device sends from its Flow IP to UDP %d." % site.AGENT_PORT)
+    elif args.lab == 9:
+        mins = int((st["scenario"]["start"] - time.time()) / 60)
+        print("Tonight's event is armed: it starts in about %s and runs for %d minutes.\n"
+              "Leave the lab network running. The ticket arrives in the morning."
+              % ("%d hours" % round(mins / 60.0) if mins >= 90 else "%d minute%s" % (max(1, mins), "" if mins <= 1 else "s"),
+                 traffic.SCENARIO_MINUTES["scan"]))
     else:
         _ticket(args.lab)
+    return 0
+
+
+def cmd_snmp(args) -> int:
+    if args.action != "test" or not args.community:
+        print("Ask this host its name over SNMP, the way the agent would:\n  python3 lab.py snmp test <community>",
+              file=sys.stderr)
+        return 1
+    got = snmp.test(args.community)
+    if got is None:
+        print("No answer from 127.0.0.1 with community %r.\n"
+              "The community string is wrong, or SNMP isn't running on this host." % args.community)
+        return 1
+    print("This host answered: its name is %r. That community string works." % got)
+    return 0
+
+
+def cmd_agent(args) -> int:
+    """Read the flow proxy's plain-text status page. Seen on Universal Agent 5.0.29 (Nov 2026): it lists the
+    sending addresses the agent has heard from, and which of them match no device in Kentik."""
+    try:
+        s = socket.create_connection(("127.0.0.1", 9996), timeout=3)
+    except OSError:
+        print("Nothing answered on 127.0.0.1:9996. This agent may not have a status page, or it isn't running.")
+        return 1
+    s.settimeout(3)
+    chunks = []
+    try:
+        while True:
+            data = s.recv(65535)
+            if not data:
+                break
+            chunks.append(data)
+    except OSError:
+        pass
+    finally:
+        s.close()
+    text = b"".join(chunks).decode(errors="replace").strip()
+    print(text or "The agent's status page was empty.")
     return 0
 
 
@@ -194,7 +262,8 @@ def cmd_check(args) -> int:
         print("The lab network isn't running. Start it: sudo python3 lab.py up")
         return 1
     ok, lines = labs.LABS[n]["check"](st)
-    print(("Solved on this host." if ok else "Not yet.") if n != 5 else "Check this one in Kentik.")
+    print(("Solved on this host." if ok else "Not yet.") if n != 5 and n not in labs.SCENARIO_LABS
+          else "Check this one in Kentik.")
     for line in lines:
         print("  " + line)
     return 0 if ok else 1
@@ -220,6 +289,13 @@ def cmd_status(args) -> int:
         for d in site.DEVICES:
             print("  %-14s from %-10s sampling 1 in %d" % (d, site.DEVICES[d][st["source"][d]], st["sample"][d]))
         print("  firewall rule     %s" % ("present" if system.firewall_present(int(st["port"])) else "absent"))
+        sc = st.get("scenario")
+        if sc:
+            now = time.time()
+            when = ("starts in %s" % _age(sc["start"] - now) if now < sc["start"]
+                    else "running, %s left" % _age(sc["end"] - now) if now < sc["end"] else "finished")
+            print("  case traffic      %s (%s)" % (sc["name"], when))
+        print("  snmp for the lab  %s" % ("on" if st.get("snmp") else "off"))
         print("  listening on %d  %s" % (st["port"], "yes" if system.listening(int(st["port"])) else "no"))
         for d, s in (stats.get("devices") or {}).items():
             print("  %-14s true %.2f Mbps, exported %.2f Mbps" % (d, s["true_bps"] / 1e6, s["sent_bps"] / 1e6))
@@ -277,7 +353,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("labs", help="list the labs").set_defaults(fn=cmd_labs)
     s = sub.add_parser("start", help="open a lab (sudo)")
     s.add_argument("lab", type=int)
+    s.add_argument("--in", dest="after", type=float, metavar="MINUTES",
+                   help="lab 9 only: start the overnight event this many minutes from now (default 360)")
     s.set_defaults(fn=cmd_start)
+    s = sub.add_parser("snmp", help="test SNMP on this host: snmp test <community>")
+    s.add_argument("action", nargs="?")
+    s.add_argument("community", nargs="?")
+    s.set_defaults(fn=cmd_snmp)
+    sub.add_parser("agent", help="show what the Universal Agent says about the flow it receives").set_defaults(fn=cmd_agent)
     sub.add_parser("ticket", help="read the open lab's ticket again").set_defaults(fn=cmd_ticket)
     s = sub.add_parser("ask", help="ask the customer a question")
     s.add_argument("topic", nargs="?", choices=list(labs.QUESTIONS))

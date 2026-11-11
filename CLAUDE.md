@@ -11,7 +11,8 @@ The hands-on labs for Brian's Kentik training course. The course app is `brianda
 - `lab.py`: the entry point.
 - `klab/site.py`: the practice network (devices, addresses, interfaces, services, paths). The same place as the course's `public/js/core/lab.js`; keep them in step.
 - `klab/netflow.py`: NetFlow v9 encode and decode, one exporter per device. From Brian's `webinarlabs`.
-- `klab/traffic.py`: everyday traffic, and what sampling does to it.
+- `klab/traffic.py`: everyday traffic, what sampling does to it, and the extra traffic of each case (`scenario`).
+- `klab/snmp.py`: the NMS lab: the lab's own marked lines in the host's `snmpd.conf`, and one hand-built SNMP GET.
 - `klab/engine.py`: the background sender. Reads `state.json` every second, so a lab changes it live.
 - `klab/labs.py`: the labs: ticket, customer answers, fault, hints, check.
 - `klab/system.py`: everything that touches the host (loopback aliases, the one firewall rule, port checks).
@@ -30,10 +31,14 @@ The hands-on labs for Brian's Kentik training course. The course app is `brianda
 - Don't state a Kentik menu path or label in a hint or check unless it has been confirmed; say "in the portal".
 - Write for students: short, plain sentences.
 
+## Labs and the course
+
+The course app's lab steps quote these commands and the cases' answers (addresses, ports). If you change a lab's number, a command, or an address in `klab/site.py`, change the matching lesson in `kentik-training` (`public/js/lessons/d1-day-one.js`, `d2-day-two.js`) in the same piece of work.
+
 ## Checking a change
 
 Run the tests. Then, as root on Linux, run the labs for real: `lab.py up`, `lab.py listen` in a second terminal as the agent, each lab's fault, fix and `check`, then `lab.py down` and confirm `ip addr show lo` and `iptables -S INPUT` are clean.
 
 ## Not built yet
 
-sFlow for `core-sw-01`, made-up SNMP, onboarding by API, scenario labs with several scenarios each, and reset (see the docs repo's proposal, "Brian's lab ideas"). Brian's `vxlanlab` has working sFlow, SNMP and Kentik API code to start from.
+sFlow for `core-sw-01`, made-up SNMP for the three devices (lab 11 uses the host's real `snmpd` instead), onboarding by API, and reset (see the docs repo's proposal, "Brian's lab ideas"). Brian's `vxlanlab` has working sFlow, SNMP and Kentik API code to start from.

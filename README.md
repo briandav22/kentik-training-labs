@@ -8,7 +8,7 @@ Python 3.8 or later, standard library only. Nothing to install.
 
 ## Before you start
 
-- A Linux host (2 CPUs, 2 GB of memory is enough) with `python3`, `git`, `iproute2`, `iptables` and `tcpdump`.
+- A Linux host (2 CPUs, 2 GB of memory is enough) with `python3`, `git`, `iproute2`, `iptables`, `tcpdump` and, for lab 11, `snmpd`. On a fresh Ubuntu or Debian machine, `sudo bash setup-host.sh` installs them all. It works the same on any provider.
 - The Kentik Universal Agent installed on that host from your own portal. It listens for flow on UDP 9995.
 
 ## Run it
@@ -30,6 +30,7 @@ sudo python3 lab.py start 1     # open the first lab and read its ticket
 | `sudo python3 lab.py tell …` | Asks the customer to change something on their devices |
 | `python3 lab.py hint` | A hint. `hint 2` and `hint 3` say more |
 | `sudo python3 lab.py check` | Tells you whether the lab is solved on this host |
+| `python3 lab.py snmp test <community>` | Lab 11: asks this host its name over SNMP, the way the agent would |
 | `python3 lab.py status` | Whether the network is running and which lab is open |
 | `sudo python3 lab.py down` | Stops everything and cleans up the host |
 
@@ -56,8 +57,16 @@ It's the same practice network the course's lessons use. Every address is made u
 | 3 | One device missing |
 | 4 | It was working yesterday |
 | 5 | The numbers are wrong |
+| 6 | The internet is crawling |
+| 7 | One DNS alert |
+| 8 | Under attack |
+| 9 | What happened overnight? |
+| 10 | The cold case |
+| 11 | The server with no health |
 
 The tickets don't say what's wrong. That's the lab.
+
+Labs 1 to 5 are about getting flow into Kentik: something in the setup is wrong and you fix it on the host or in the portal. Labs 6 to 10 are cases: the setup is fine and the answer is in the traffic, so you solve them in your portal and close them in the course. Lab 9 is armed in the evening (`sudo python3 lab.py start 9`) and happens about six hours later; `--in 5` makes it five minutes. Lab 11 turns on SNMP on the host itself, so the host can be added to Kentik NMS; it needs the `snmpd` package (`sudo apt-get install -y snmpd`).
 
 ## How it works
 
@@ -66,9 +75,10 @@ Kentik tells devices apart by the address their flow comes from. `lab.py up` add
 ## For the instructor
 
 - `python3 lab.py status --reveal` shows what each lab has really changed. It gives the lab away.
+- `python3 lab.py agent` prints the Universal Agent's own status page (seen on agent 5.0.29: plain text on `127.0.0.1:9996`). It lists the sending addresses the agent hears from and which of them match no device in Kentik, which makes labs 1 and 3 visible. How quickly it updates after a device is added is not known yet.
 - `python3 lab.py listen` is a stand-in for the agent: it prints the flow that arrives on a port. Useful for trying a lab without a portal.
 - Tests: `python3 -m unittest discover -s tests`
 
 ## Status
 
-A first version, written Nov 11, 2026. Every lab was run end to end on Linux against the stand-in listener. **None has been run against a real Universal Agent or a Kentik portal yet.** `core-sw-01` sends NetFlow for now; in the course it is an sFlow switch.
+Written Nov 11, 2026. Every lab was run end to end on Linux against the stand-in listener, and lab 11 against a real `snmpd`. **Labs 6 to 11 have not been run against a real Universal Agent or a Kentik portal yet**; labs 1 to 5 are being proven on a test host. `core-sw-01` sends NetFlow for now; in the course it is an sFlow switch.
