@@ -75,6 +75,7 @@ Kentik tells devices apart by the address their flow comes from. `lab.py up` add
 ## For the instructor
 
 - `python3 lab.py status --reveal` shows what each lab has really changed. It gives the lab away.
+- `python3 lab.py agent` prints the Universal Agent's own status page (seen on agent 5.0.29: plain text on `127.0.0.1:9996`). It lists the sending addresses the agent hears from and which of them match no device in Kentik, which makes labs 1 and 3 visible. How quickly it updates after a device is added is not known yet.
 - `python3 lab.py listen` is a stand-in for the agent: it prints the flow that arrives on a port. Useful for trying a lab without a portal.
 - Tests: `python3 -m unittest discover -s tests`
 

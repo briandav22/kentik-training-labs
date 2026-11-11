@@ -129,8 +129,8 @@ LABS = {
         "hints": ["Is flow still arriving at this host? And is the agent still listening? Check both.",
                   "tcpdump shows the packets, and the agent is listening, yet the agent gets nothing. tcpdump sees "
                   "a packet before the host's firewall does.",
-                  "sudo iptables -L INPUT -n -v    One rule drops the flow; watch its packet counter climb. "
-                  "Delete that rule with sudo iptables -D INPUT <its number>."]},
+                  "sudo iptables -L INPUT -n -v --line-numbers    One rule drops the flow; watch its packet "
+                  "counter climb. Delete that rule with sudo iptables -D INPUT <its number>."]},
     5: {"title": "The numbers are wrong",
         "ticket": ["Kentik says core-sw-01 carries far less traffic than edge-rtr-01 for the same HQ users.",
                    "Our own tools say they carry about the same. Which one is lying?"],

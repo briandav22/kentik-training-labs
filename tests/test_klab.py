@@ -125,14 +125,32 @@ class EngineTest(unittest.TestCase):
             eng.tick(1.0, time.time(), self.st)
         self.assertEqual(self.drain(), [])
 
+    def test_stats_follow_a_change_within_the_window(self):
+        eng = Engine(seed=6)
+        self.addCleanup(eng.close)
+        t0 = 1_900_000_000.0
+        eng.since = t0
+        for i in range(60):
+            eng.tick(1.0, t0 + i, self.st)
+        quiet = eng.stats(t0 + 60)["devices"]["edge-rtr-01"]["true_bps"]
+        self.st["scenario"] = {"name": "cold", "start": t0 + 60, "end": t0 + 9999}
+        for i in range(60, 150):
+            eng.tick(1.0, t0 + i, self.st)
+        self.drain()
+        busy = eng.stats(t0 + 150)["devices"]["edge-rtr-01"]["true_bps"]
+        self.assertGreater(busy, 8 * quiet)
+        self.assertGreater(busy, 25e6)            # the case's own rate, not an average since the start
+
     def test_stats_show_the_gap_sampling_makes(self):
         eng = Engine(seed=5)
         self.addCleanup(eng.close)
         self.st["sample"]["core-sw-01"] = 100
-        for _ in range(200):
-            eng.tick(1.0, time.time(), self.st)
+        t0 = time.time()
+        eng.since = t0
+        for i in range(200):
+            eng.tick(1.0, t0 + i, self.st)
         self.drain()
-        d = eng.stats(time.time())["devices"]
+        d = eng.stats(t0 + 200)["devices"]
         self.assertEqual(d["edge-rtr-01"]["true_bps"], d["edge-rtr-01"]["sent_bps"])
         self.assertGreater(d["core-sw-01"]["true_bps"], 20 * d["core-sw-01"]["sent_bps"])
 

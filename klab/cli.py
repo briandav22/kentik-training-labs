@@ -74,6 +74,13 @@ def cmd_down(args) -> int:
     pid = _pid()
     if pid:
         os.kill(pid, signal.SIGTERM)
+        for _ in range(50):                 # wait for the sender to go, so "nothing is left" is true
+            if not _pid():
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, signal.SIGKILL)
+            time.sleep(0.2)
     st = state.load()
     problem = system.firewall(int(st["port"]), False) or system.firewall(site.AGENT_PORT, False)
     if st.get("snmp"):
@@ -148,6 +155,31 @@ def cmd_snmp(args) -> int:
               "The community string is wrong, or SNMP isn't running on this host." % args.community)
         return 1
     print("This host answered: its name is %r. That community string works." % got)
+    return 0
+
+
+def cmd_agent(args) -> int:
+    """Read the flow proxy's plain-text status page. Seen on Universal Agent 5.0.29 (Nov 2026): it lists the
+    sending addresses the agent has heard from, and which of them match no device in Kentik."""
+    try:
+        s = socket.create_connection(("127.0.0.1", 9996), timeout=3)
+    except OSError:
+        print("Nothing answered on 127.0.0.1:9996. This agent may not have a status page, or it isn't running.")
+        return 1
+    s.settimeout(3)
+    chunks = []
+    try:
+        while True:
+            data = s.recv(65535)
+            if not data:
+                break
+            chunks.append(data)
+    except OSError:
+        pass
+    finally:
+        s.close()
+    text = b"".join(chunks).decode(errors="replace").strip()
+    print(text or "The agent's status page was empty.")
     return 0
 
 
@@ -328,6 +360,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("action", nargs="?")
     s.add_argument("community", nargs="?")
     s.set_defaults(fn=cmd_snmp)
+    sub.add_parser("agent", help="show what the Universal Agent says about the flow it receives").set_defaults(fn=cmd_agent)
     sub.add_parser("ticket", help="read the open lab's ticket again").set_defaults(fn=cmd_ticket)
     s = sub.add_parser("ask", help="ask the customer a question")
     s.add_argument("topic", nargs="?", choices=list(labs.QUESTIONS))
