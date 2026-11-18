@@ -21,7 +21,7 @@ The hands-on labs for Brian's Kentik training course. The course app is `brianda
 
 ## Rules
 
-- Python 3.8+, standard library only. Students install nothing.
+- Python 3.4+, standard library only. Students install nothing. Lab hosts include Ubuntu 14.04 (Python 3.4): no `subprocess.run`, f-strings, `typing` without the fallback in `klab/__init__.py`, or anything else newer than 3.4.
 - **A lab must not give itself away.** The ticket, `status`, `labs` and the first hint never name the fault. Only `status --reveal` and later hints do. A test enforces this; extend it with every lab.
 - Clean up after yourself: `down` leaves no alias, rule or process. The firewall code adds and removes only the rule tagged `klab`, never anyone else's.
 - Nothing may depend on one cloud provider. A plain Linux host is the only assumption.

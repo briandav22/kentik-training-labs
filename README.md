@@ -4,7 +4,7 @@ Hands-on labs for the Kentik training course. One command plays a small made-up 
 
 In every lab you are the SE and the lab plays the customer. A ticket arrives. You ask questions, look at the host, fix what's wrong, and confirm it in Kentik.
 
-Python 3.8 or later, standard library only. Nothing to install.
+Python 3.4 or later (Ubuntu 14.04 and up), standard library only. Nothing to install.
 
 ## Before you start
 
