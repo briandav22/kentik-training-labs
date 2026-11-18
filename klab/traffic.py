@@ -27,6 +27,16 @@ def conversation(group: str, client: str, service: str, now: float, rng: random.
     return out
 
 
+def _pick(names: List[str], weights: List[float], rng: random.Random) -> str:
+    """One name, chosen by weight. Not rng.choices: Python 3.4 doesn't have it."""
+    r = rng.random() * sum(weights)
+    for name, w in zip(names, weights):
+        r -= w
+        if r < 0:
+            return name
+    return names[-1]
+
+
 def generate(interval: float, now: float, rng: random.Random, period: float = 6.0) -> Dict[str, List[Dict]]:
     """All records for one tick, by device. Each host starts a conversation about every `period` seconds."""
     names, weights = site.service_choices()
@@ -35,7 +45,7 @@ def generate(interval: float, now: float, rng: random.Random, period: float = 6.
     for group in site.GROUPS:
         for h in site.hosts(group):
             if rng.random() < p:
-                svc = rng.choices(names, weights)[0]
+                svc = _pick(names, weights, rng)
                 for device, records in conversation(group, h, svc, now, rng).items():
                     out[device] += records
     return out

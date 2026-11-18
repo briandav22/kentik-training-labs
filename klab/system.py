@@ -12,10 +12,11 @@ FW_COMMENT = "klab"
 
 def _run(cmd: List[str]) -> Tuple[int, str]:
     try:
-        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     except FileNotFoundError:
         return 127, "%s not found" % cmd[0]
-    return r.returncode, (r.stderr or r.stdout).strip()
+    out, err = p.communicate()      # not subprocess.run: Python 3.4 doesn't have it
+    return p.returncode, (err or out).strip()
 
 
 def alias_cmds(remove: bool = False) -> List[List[str]]:
