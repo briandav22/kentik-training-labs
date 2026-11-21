@@ -242,6 +242,8 @@ class ServerTest(unittest.TestCase):
     def test_every_call_needs_the_key(self):
         self.assertEqual(self.req("GET", "/api/status", key=None)[0], 403)
         self.assertEqual(self.req("GET", "/api/status", key="wrong")[0], 403)
+        self.assertEqual(self.req("GET", "/api/status", key="t\u00e9st-key")[0], 403)     # not ASCII: still just a no
+        self.assertRegex(web.new_key(), r"^[A-Za-z0-9_-]{12}$")
         self.assertEqual(self.req("POST", "/api/check", {}, key=None)[0], 403)
         self.assertEqual(self.req("GET", "/api/status")[0], 200)
 

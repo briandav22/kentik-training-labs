@@ -9,14 +9,15 @@ can't reach it through DNS tricks), and it only serves files from klab/ui. Launc
 commands do: run it with sudo, or the site shows the command to run instead.
 """
 import argparse
+import base64
 import contextlib
+import hmac
 import http.server
 import io
 import ipaddress
 import json
 import mimetypes
 import os
-import secrets
 import socket
 import socketserver
 import sys
@@ -35,11 +36,22 @@ def is_root() -> bool:
     return hasattr(os, "geteuid") and os.geteuid() == 0
 
 
+@contextlib.contextmanager
+def _captured(out):
+    """Both stdout and stderr into out. (contextlib.redirect_stderr is Python 3.5+; lab hosts run 3.4.)"""
+    old = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = out
+    try:
+        yield
+    finally:
+        sys.stdout, sys.stderr = old
+
+
 def run(fn: Callable, **kw) -> Dict:
     """Run a lab.py command and return what it printed, as the terminal would have shown it."""
     args = argparse.Namespace(**kw)
     out = io.StringIO()
-    with LOCK, contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+    with LOCK, _captured(out):
         try:
             rc = fn(args)
         except PermissionError:
@@ -141,7 +153,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return False
 
     def _key_ok(self) -> bool:
-        return secrets.compare_digest(self.headers.get("X-Lab-Key", ""), self.key)
+        given = (self.headers.get("X-Lab-Key") or "").encode("utf-8")
+        return hmac.compare_digest(given, self.key.encode("utf-8"))
 
     def _body(self) -> Dict:
         try:
@@ -262,6 +275,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._json(404, {"error": "No such call"})
 
 
+def new_key() -> str:
+    """Twelve random URL-safe characters. (The secrets module is Python 3.6+.)"""
+    return base64.urlsafe_b64encode(os.urandom(9)).decode()
+
+
 def _lan_address() -> str:
     """This host's address on its main network, for the link a laptop opens. Connecting a UDP socket sends
     nothing; it only asks the kernel which address it would use (192.0.2.1 is a documentation address)."""
@@ -291,7 +309,7 @@ def make_server(host: str, port: int, key: str) -> Server:
 
 
 def serve(host: str = "127.0.0.1", port: int = 8090, key: Optional[str] = None, open_browser: bool = False) -> int:
-    key = key or os.environ.get("KLAB_KEY") or secrets.token_urlsafe(9)
+    key = key or os.environ.get("KLAB_KEY") or new_key()
     try:
         httpd = make_server(host, port, key)
     except OSError as e:

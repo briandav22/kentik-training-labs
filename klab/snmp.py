@@ -2,6 +2,7 @@
 
 The device in this lab is real: the student's Linux host, answering with its real CPU, memory and interfaces.
 """
+import binascii
 import shutil
 import socket
 import subprocess
@@ -27,12 +28,19 @@ def _lines() -> List[str]:
 
 
 def _restart() -> str:
-    try:
-        r = subprocess.run(["systemctl", "restart", "snmpd"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           universal_newlines=True)
-    except FileNotFoundError:
-        return "systemctl not found; restart snmpd yourself"
-    return "" if r.returncode == 0 else (r.stderr.strip() or "couldn't restart snmpd")
+    """Restart snmpd: systemctl where there is one, service on older hosts (Ubuntu 14.04 has upstart).
+    Popen, not subprocess.run, which Python 3.4 doesn't have."""
+    problem = "Neither systemctl nor service was found; restart snmpd yourself"
+    for cmd in (["systemctl", "restart", "snmpd"], ["service", "snmpd", "restart"]):
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        except OSError:
+            continue
+        _, err = p.communicate()
+        if p.returncode == 0:
+            return ""
+        problem = err.strip() or "couldn't restart snmpd"
+    return problem
 
 
 def configure(on: bool) -> str:
@@ -114,7 +122,7 @@ def parse_value(reply: bytes) -> Optional[str]:
             return val.decode(errors="replace")
         if tag in (0x02, 0x41, 0x42, 0x43):
             return str(int.from_bytes(val, "big"))
-        return "(no such object)" if tag in (0x80, 0x81, 0x82) else val.hex()
+        return "(no such object)" if tag in (0x80, 0x81, 0x82) else binascii.hexlify(val).decode()   # not .hex(): 3.5+
     except (IndexError, ValueError):
         return None
 

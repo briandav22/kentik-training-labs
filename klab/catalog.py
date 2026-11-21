@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 
 from . import labs
 
-TRACKS: List[Dict] = [
+TRACKS = [   # type: List[Dict]
     {"id": "setup", "title": "Get set up", "sub": "Once, at the start: your host, your agent and your portal."},
     {"id": "flow", "title": "Get flow into Kentik", "sub": "Something in the setup is wrong. Find it and fix it."},
     {"id": "explore", "title": "Ask the data", "sub": "Data Explorer on your own traffic."},
@@ -31,7 +31,7 @@ TRACKS: List[Dict] = [
 # time in minutes, level, course (the lesson that sends the room here), line (the tile's one line),
 # goal, find (what to find out), steps (text, or {"cmd", "text"}), look, stuck, key (the takeaway),
 # needs and adds (the portal before and after: what a reset takes out), answer (instructor only).
-LABS: List[Dict] = [
+LABS = [     # type: List[Dict]
     # ---------------------------------------------------------------- get set up
     {"id": "setup", "track": "setup", "engine": None, "label": "Setup", "title": "Set up your host", "art": "setup",
      "time": 20, "level": "Start here", "course": "get-connected",
