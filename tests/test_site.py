@@ -1,5 +1,10 @@
-"""The lab site (python3 lab.py ui): its catalog, the portal details and the server."""
+"""The lab site (python3 lab.py ui): its catalog, the portal details, the server and its class copy."""
+import argparse
+import builtins
+import contextlib
+import getpass
 import http.client
+import io
 import http.server
 import json
 import os
@@ -11,7 +16,7 @@ import unittest
 
 os.environ.setdefault("KLAB_HOME", tempfile.mkdtemp(prefix="klab-test-"))
 
-from klab import catalog, labs, portal, site, snmp, web   # noqa: E402
+from klab import catalog, cli, labs, portal, site, snmp, state, web   # noqa: E402
 
 UI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "klab", "ui")
 
@@ -193,16 +198,45 @@ class PortalTest(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
-    def test_a_reset_keeps_the_agent_unless_its_a_full_wipe(self):
-        labs_plan, full = portal.plan("labs"), portal.plan("full")
-        self.assertTrue(labs_plan["keep"])
-        self.assertNotIn("agent", [x["kind"] for x in labs_plan["portal"]])
-        self.assertEqual(full["keep"], [])
-        self.assertIn("agent", [x["kind"] for x in full["portal"]])
+    def test_a_reset_takes_out_what_the_labs_added_and_keeps_the_agent(self):
+        plan = portal.plan()
+        self.assertIn("Universal Agent", " ".join(plan["keep"]))
+        self.assertNotIn("agent", [x["kind"] for x in plan["portal"]])
         added = {a for lab in catalog.LABS for a in lab["adds"]} - {"agent"}
-        self.assertEqual({x["kind"] for x in labs_plan["portal"]}, added)
-        for x in full["portal"]:
+        self.assertEqual({x["kind"] for x in plan["portal"]}, added)
+        for x in plan["portal"]:
             self.assertTrue(x["how"], x["kind"])
+
+    def run_portal(self, action, answers=()):
+        """lab.py portal <action>, typing the answers in turn."""
+        typed = list(answers)
+        real_input, real_getpass = builtins.input, getpass.getpass
+        builtins.input = lambda prompt="": typed.pop(0)
+        getpass.getpass = lambda prompt="": typed.pop(0)
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                rc = cli.cmd_portal(argparse.Namespace(action=action))
+        finally:
+            builtins.input, getpass.getpass = real_input, real_getpass
+        return rc, out.getvalue()
+
+    def test_the_terminal_saves_tests_and_forgets_the_details(self):
+        os.environ["KLAB_PORTAL_BASE"] = "http://127.0.0.1:9/api/v5"
+        rc, text = self.run_portal("set", ["student@example.com", "abcdefgh12345678", "eu"])
+        self.assertIn("Saved in", text)
+        self.assertIn("Couldn't reach", text)              # saved, but the portal can't be reached from here
+        self.assertEqual(rc, 1)
+        self.assertEqual(stat.S_IMODE(os.stat(self.file).st_mode), 0o600)
+        self.assertEqual(portal.load()["region"], "eu")
+        rc, text = self.run_portal("show")
+        self.assertIn("ends 5678", text)
+        self.assertNotIn("abcdefgh12345678", text)
+        rc, text = self.run_portal("set", ["", "", ""])    # Enter keeps everything
+        self.assertEqual(portal.load(), {"email": "student@example.com", "token": "abcdefgh12345678", "region": "eu"})
+        self.run_portal("forget")
+        self.assertFalse(os.path.exists(self.file))
+        self.assertIn("lab.py portal set", self.run_portal("show")[1])
 
 
 class ServerTest(unittest.TestCase):
@@ -294,10 +328,10 @@ class ServerTest(unittest.TestCase):
         self.assertIn("2055", r["answer"])
         self.assertNotIn("2055", json.dumps(self.req("GET", "/api/catalog")[1]))
 
-    def test_a_full_wipe_needs_wipe_typed(self):
-        code, r, _ = self.req("POST", "/api/reset", {"scope": "full"})
-        self.assertEqual(code, 400)
-        self.assertIn("WIPE", r["error"])
+    def test_the_reset_plan_keeps_the_agent(self):
+        code, r, _ = self.req("GET", "/api/reset")
+        self.assertEqual(code, 200)
+        self.assertIn("Universal Agent", " ".join(r["keep"]))
 
     def test_without_sudo_the_site_shows_the_command(self):
         real = web.is_root
@@ -318,6 +352,61 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("Nothing to launch", r["output"])
         self.assertEqual(self.req("POST", "/api/launch", {"id": "no-such-lab"})[0], 404)
+
+
+class ClassCopyTest(unittest.TestCase):
+    """lab.py ui --classroom: the instructor's copy for the room. It runs nothing; only the answers need the key."""
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = web.make_server("127.0.0.1", 0, "test-key", classroom=True)
+        cls.port = cls.httpd.server_address[1]
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    req = ServerTest.req
+
+    def test_the_room_reads_the_labs_without_the_key(self):
+        self.assertEqual(self.req("GET", "/api/catalog", key=None)[0], 200)
+        code, st, _ = self.req("GET", "/api/status", key=None, host="instructor-laptop.local:%d" % self.port)
+        self.assertEqual(code, 200)
+        self.assertTrue(st["classroom"])
+        self.assertIsNone(st["portal"])
+        self.assertFalse(st["network"])
+        self.assertEqual(self.req("GET", "/api/hint?id=lab-2&n=1", key=None)[0], 200)
+        code, r, _ = self.req("POST", "/api/ask", {"id": "lab-3", "topic": "ips"}, key=None)
+        self.assertEqual(r["a"], labs.answer(3, "ips"))
+
+    def test_the_answers_need_the_key(self):
+        code, r, _ = self.req("GET", "/api/answer?id=lab-2", key=None)
+        self.assertEqual((code, r["error"]), (403, "instructor"))
+        self.assertIn("2055", self.req("GET", "/api/answer?id=lab-2")[1]["answer"])
+
+    def test_every_button_gives_the_command_for_your_own_host(self):
+        before = state.load()
+        want = [("/api/launch", {"id": "lab-4"}, "sudo python3 lab.py start 4"),
+                ("/api/launch", {"id": "overnight"}, "sudo python3 lab.py start 9"),
+                ("/api/launch", {"id": "overnight", "when": "soon"}, "sudo python3 lab.py start 9 --in 5"),
+                ("/api/check", {}, "sudo python3 lab.py check"),
+                ("/api/healthy", {}, "sudo python3 lab.py start 0"),
+                ("/api/stop", {}, "sudo python3 lab.py down"),
+                ("/api/tell", {"request": ["port", "9995"]}, "sudo python3 lab.py tell port 9995")]
+        for path, body, cmd in want:
+            code, r, _ = self.req("POST", path, body, key=None)
+            self.assertEqual((code, r["terminal"], r["cmd"]), (200, True, cmd), path)
+        code, r, _ = self.req("POST", "/api/reset", {}, key=None)
+        self.assertEqual(r["host"]["cmd"], "sudo python3 lab.py down")
+        self.assertIn("Nothing to launch", self.req("POST", "/api/launch", {"id": "synthetics"}, key=None)[1]["output"])
+        self.assertEqual(state.load(), before)               # nothing ran here
+
+    def test_portal_details_never_reach_the_class_copy(self):
+        code, r, _ = self.req("POST", "/api/portal", {"email": "a@example.com", "token": "abcdefgh12345678"})
+        self.assertEqual(code, 400)
+        self.assertIn("lab.py portal set", r["error"])
+        self.assertEqual(self.req("POST", "/api/portal/test", {})[0], 400)
 
 
 if __name__ == "__main__":

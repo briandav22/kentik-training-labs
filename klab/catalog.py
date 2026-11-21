@@ -41,13 +41,16 @@ LABS = [     # type: List[Dict]
               "Is something listening for flow on UDP 9995?"],
      "steps": [
          "Open your Kentik portal in a browser tab and leave it open.",
-         "Copy the **Universal Agent** install command from your portal and run it on this host. On the older "
-         "Launchpad hosts the download fails the first time: run the commands in the setup guide, then run the "
-         "install again.",
+         "In Launchpad, open **linux-server-gns3**, then its terminal.",
+         {"cmd": "git clone https://github.com/briandav22/kentik-training-labs.git && cd kentik-training-labs",
+          "text": "Download the training labs."},
+         "Copy the **Universal Agent** install command from your portal and run it in the terminal. If the download "
+         "fails on these older hosts, run the commands in the setup guide, then run the install again.",
          "Authorize the agent in your portal.",
          {"cmd": "sudo ss -ulnp | grep 9995", "text": "Check that something now listens for flow on UDP 9995."},
      ],
-     "look": "Your agent authorized in your portal, and one line from ss showing a program on UDP 9995.",
+     "look": "Your agent authorized in your portal, the training labs on your host, and one line from ss showing a "
+             "program on UDP 9995.",
      "stuck": "Still failing after the guide? Keep the error on screen and ask your instructor.",
      "key": "This is what a customer does on day one: an agent inside their network, calling out to Kentik.",
      "needs": [], "adds": ["agent"],
@@ -68,8 +71,7 @@ LABS = [     # type: List[Dict]
      "find": ["Which devices are sending, and from which addresses?", "What does Kentik need to know about each one?",
               "How do you prove the flow arrived?"],
      "steps": [
-         {"cmd": "sudo python3 lab.py up && sudo python3 lab.py start 1", "text": "Start the made-up network and the lab. "
-          "The Launch button does the same."},
+         {"cmd": "sudo python3 lab.py up && sudo python3 lab.py start 1", "text": "Start the made-up network and the lab."},
          {"cmd": "sudo tcpdump -i lo -n -c 6 udp port 9995", "text": "Check that flow is arriving. Which addresses is it from?"},
          {"cmd": "python3 lab.py agent", "text": "Run the agent's health check. Are your devices registered in Kentik yet?"},
          "Onboard each device in your portal: its name and sending address, through your agent.",
@@ -89,11 +91,11 @@ LABS = [     # type: List[Dict]
      "find": ["Is flow arriving at the host at all?", "Is it arriving where the agent listens?",
               "Who has to change something: the customer, or us?"],
      "steps": [
-         {"cmd": "sudo python3 lab.py start 2", "text": "Open the ticket. The Launch button does the same."},
+         {"cmd": "sudo python3 lab.py start 2", "text": "Open the ticket."},
          "Ask the customer whatever you like. Notice what they're sure of and what they aren't.",
          {"cmd": "sudo tcpdump -i lo -n -c 6 udp", "text": "Look at the flow yourself. Read the whole line: where "
           "from, and where to."},
-         {"cmd": "sudo python3 lab.py check", "text": "Fix it, then check your work. Check my work does the same."},
+         {"cmd": "sudo python3 lab.py check", "text": "Fix it, then check your work."},
      ],
      "look": "Check says the devices send to a port where something is listening, and traffic returns in your portal.",
      "stuck": "Take a hint: they get more specific each time.",
@@ -168,7 +170,7 @@ LABS = [     # type: List[Dict]
      "find": ["Who are the top talkers, and which application moves the most?", "What leaves for the internet?",
               "How much does the branch send to the HQ servers?"],
      "steps": [
-         {"cmd": "sudo python3 lab.py start 0", "text": "Put the network back to healthy. The Launch button does the same."},
+         {"cmd": "sudo python3 lab.py start 0", "text": "Put the network back to healthy."},
          "In **Data Explorer**: who are the top talkers? Which application moves the most bytes?",
          "Which destination has the most flows but almost no bytes? Why would that be?",
          "Filter to one device, `edge-rtr-01`. What leaves for the internet, and through which interface?",
@@ -251,7 +253,7 @@ LABS = [     # type: List[Dict]
      "find": ["Which address was behind it, and where is it?", "What exactly did it do?", "When did it start and stop?"],
      "steps": [
          {"cmd": "sudo python3 lab.py start 9", "text": "In the evening: arm tonight's event, and leave the lab network "
-          "running. Arm for tonight does the same."},
+          "running."},
          "In the morning, in **Data Explorer**, set the time range to cover last night.",
          "Filter to destination `10.1.60.0/24`. Group by source address and count the destination ports each one used.",
          "One source stands out from all the others. Which, and where does that address live?",
@@ -296,7 +298,7 @@ LABS = [     # type: List[Dict]
      "goal": "Turn the query that found the attack into an alert policy.",
      "find": ["What is normal for this server?", "Where should the line go?", "Does the alert clear when the attack stops?"],
      "steps": [
-         {"cmd": "sudo python3 lab.py start 8", "text": "Make sure Case 3's traffic is running. Launch does the same."},
+         {"cmd": "sudo python3 lab.py start 8", "text": "Make sure Case 3's traffic is running."},
          "In your portal, open the alerting section and start a new alert policy for traffic.",
          "Give it the query from Case 3: traffic to destination `10.1.60.10`, measured in bits per second.",
          "Set a threshold well above the server's normal traffic and well below the attack.",

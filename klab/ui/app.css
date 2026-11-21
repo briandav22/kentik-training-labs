@@ -1,6 +1,7 @@
 /* The lab site. The course's look (tokens.css is the course's own): flat fills, 0.5px borders, rounded cards,
    weights 400 and 500, the same color meaning. Built for a laptop or the host's own browser, from 1024 wide up. */
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
   font: 15px/1.5 var(--font); }
@@ -230,6 +231,15 @@ main { flex: 1; width: 100%; max-width: 1320px; margin: 0 auto; padding: 22px 22
 .reset-done .console { margin: 6px 0 10px; }
 .lab-main { min-width: 0; }
 main:focus, main:focus-visible { outline: none; }
+.cmd-row + .cmd-row { margin-top: 10px; }
+.cmd-label { margin: 0 0 2px; font-size: 14px; color: var(--text-2); }
+.cmd-row .cmd { margin-top: 2px; }
+.run-note { margin-top: 12px !important; }
+.side .cmd code { white-space: normal; overflow-wrap: anywhere; font-size: 12.5px; padding: 7px 8px; }
+.run-note code { background: var(--surface-0); padding: 1px 5px; border-radius: 5px; white-space: nowrap; }
+.tell-out:empty { display: none; }
+.tell-out { margin-top: 8px; }
+.reset-card .cmd-row { margin-bottom: 10px; }
 .side .card + .card { margin-top: 0; }
 .hints .run-row .btn { flex: none; }
 .resets .card, .two .card { margin: 0; }

@@ -1,5 +1,6 @@
 """The lab command: python3 lab.py <command>."""
 import argparse
+import getpass
 import os
 import signal
 import socket
@@ -343,9 +344,44 @@ def cmd_listen(args) -> int:
 
 
 def cmd_ui(args) -> int:
-    """The lab site: every lab as a tile, launched from the browser."""
+    """The lab site: every lab as a tile, launched from the browser. --classroom: the class copy, for the room."""
     from . import web
-    return web.serve(host=args.host, port=args.port, key=args.key, open_browser=args.open)
+    host = args.host or ("0.0.0.0" if args.classroom else "127.0.0.1")
+    return web.serve(host=host, port=args.port, key=args.key, open_browser=args.open, classroom=args.classroom)
+
+
+def cmd_portal(args) -> int:
+    """Your Kentik portal's email and API token, saved on this host for the labs, and a read-only test."""
+    from . import portal
+    if args.action == "forget":
+        portal.forget()
+        print("Removed your portal details from %s." % portal.env_path())
+        return 0
+    if args.action == "set":
+        cfg = portal.load()
+        try:
+            email = input("The email you sign in to Kentik with%s: " % (" [%s]" % cfg["email"] if cfg["email"] else "")).strip()
+            token = getpass.getpass("Your API token (it won't show as you type%s): "
+                                    % (". Enter keeps the saved one" if cfg["token"] else ""))
+            region = input("Your portal's region, us or eu [%s]: " % cfg["region"]).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nNothing saved.")
+            return 1
+        problem = portal.save(email or cfg["email"], token, region or cfg["region"])
+        if problem:
+            print(problem, file=sys.stderr)
+            return 1
+        print("Saved in %s, readable only by you." % portal.env_path())
+    cfg = portal.load()
+    pub = portal.public(cfg)
+    if not pub["connected"]:
+        print("No portal details saved on this host yet. Add yours:  python3 lab.py portal set")
+        return 1
+    print("Email:   %s\nRegion:  %s\nToken:   saved%s" % (pub["email"], pub["region"].upper(),
+                                                         ", ends " + pub["token_end"] if pub["token_end"] else ""))
+    r = portal.test(cfg)
+    print(r["message"])
+    return 0 if r["ok"] else 1
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -380,10 +416,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("check", help="is the open lab solved?").set_defaults(fn=cmd_check)
     s = sub.add_parser("ui", help="the lab site in your browser (sudo to launch labs from it)")
     s.add_argument("--port", type=int, default=8090)
-    s.add_argument("--host", default="127.0.0.1", help="where to listen (default 127.0.0.1: this host only)")
+    s.add_argument("--host", help="where to listen (default 127.0.0.1, this host only; 0.0.0.0 with --classroom)")
+    s.add_argument("--classroom", action="store_true",
+                   help="the class copy, run by the instructor: the room reads the labs in a browser and runs the "
+                        "commands in their own hosts' terminals")
     s.add_argument("--key", help="the key in the link (default: a new one each time)")
     s.add_argument("--open", action="store_true", help="open it in this host's browser")
     s.set_defaults(fn=cmd_ui)
+    s = sub.add_parser("portal", help="your Kentik portal's email and API token for the labs: portal, portal set, portal forget")
+    s.add_argument("action", nargs="?", choices=["show", "set", "forget"], default="show")
+    s.set_defaults(fn=cmd_portal)
     s = sub.add_parser("listen", help="a stand-in for the agent, for testing")
     s.add_argument("--port", type=int, default=site.AGENT_PORT)
     s.add_argument("--seconds", type=float, default=0)

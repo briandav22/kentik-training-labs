@@ -19,8 +19,8 @@ The hands-on labs for Brian's Kentik training course. The course app is `brianda
 - `klab/state.py`: the state directory (`/var/tmp/klab`, or `KLAB_HOME`).
 - `klab/cli.py`: the commands.
 - `klab/catalog.py`: the lab site's tiles and pages: tracks, steps (from the course's lab steps, Nov 20, 2026), what success looks like, what each lab needs in the portal and adds to it (so a reset can take it out), and the instructor's answer. Every lab in `labs.py` has one entry; a `replay` reruns a case's traffic for another lab (alerting, AI).
-- `klab/portal.py`: the student's portal details (email, API token, region) in `~/.kentik.env`, a read-only test (the device list), and what a reset takes out. `PORTAL_WRITES` is off: nothing changes the portal yet.
-- `klab/web.py`: the lab site's server and JSON API (`lab.py ui`). It runs the same functions as the commands, under one lock.
+- `klab/portal.py`: the student's portal details (email, API token, region) in `~/.kentik.env`, a read-only test (the device list), and what a reset takes out (the agent always stays). `PORTAL_WRITES` is off: nothing changes the portal yet. `lab.py portal set` saves them from a terminal.
+- `klab/web.py`: the lab site's server and JSON API (`lab.py ui`). It runs the same functions as the commands, under one lock. `--classroom` serves the class copy from the instructor's machine: it runs nothing, every button answers with the command for the student's own terminal, it refuses portal details, and only `/api/answer` needs the key.
 - `klab/ui/`: the site's pages: `index.html`, `app.js` (all of the page), `app.css`, `art.js` (a drawing per tile) and `tokens.css` (a copy of the course's colors, light and dark, Kentik and Infoblox).
 - `tests/`: `python3 -m unittest discover -s tests` (`test_site.py` covers the site)
 
@@ -30,6 +30,7 @@ The hands-on labs for Brian's Kentik training course. The course app is `brianda
 - **A lab must not give itself away.** The ticket, `status`, `labs` and the first hint never name the fault. Only `status --reveal` and later hints do. A test enforces this; extend it with every lab.
 - The same goes for the lab site: a lab's tile, drawing and page, and `/api/status`, never name the fault. `tests/test_site.py` checks them with the same words. Answers come only from `/api/answer` (instructor view); the takeaway shows once a lab is marked done.
 - The site: nothing loads from the internet, and the page runs only its own files (the server's Content-Security-Policy is `script-src 'self'`), so no inline scripts or `on…` handlers. Every API call needs the key; the token never goes back to a page.
+- Brian's class (Nov 21, 2026): the Launchpad lab hosts have only a terminal, so the room uses the class copy and runs commands in their own hosts' terminals. Each student uses their own API token. A reset never removes the Universal Agent: the labs always need one. Step text stays true in both modes: don't name a button in a step.
 - A new lab needs a `labs.py` entry, a `catalog.py` entry and a drawing in `ui/art.js` that shows the symptom, never the cause.
 - Clean up after yourself: `down` leaves no alias, rule or process. The firewall code adds and removes only the rule tagged `klab`, never anyone else's.
 - Nothing may depend on one cloud provider. A plain Linux host is the only assumption.

@@ -86,16 +86,16 @@
   const S = {
     cat: null,          // GET /api/catalog: tracks, labs, the customer's questions
     status: null,       // GET /api/status, every few seconds
-    keyProblem: !KEY,   // no key, or the wrong one: show how to open the site
+    keyProblem: false,  // the server wants a key we don't have: show how to open the site
     offline: false,     // the server stopped answering
     bootError: '',
     busy: '',           // the action running now, one at a time, as in one terminal
     chats: {},          // lab id -> [{ q, a, who }]
     hints: {},          // lab id -> [{ n, of, text }]
     log: {},            // lab id -> [{ kind, text }]: what the host printed
-    root: {},           // lab id -> the command to run, when the site has no sudo
+    root: {},           // lab id -> { cmd, terminal }: a command to run yourself (no sudo here, or the class copy)
     answers: {},        // lab id -> { answer, reveal }: instructor view
-    plans: null,        // GET /api/reset for both scopes
+    plan: null,         // GET /api/reset: what a reset takes out
     resetResult: null,
     portalMsg: null,    // { kind, text } under the portal form
   };
@@ -103,7 +103,10 @@
   const progressAll = () => store.get('klab.progress', {});
   const progress = id => Object.assign({ steps: [], done: false, hints: 0 }, progressAll()[id] || {});
   function saveProgress(id, p) { const all = progressAll(); all[id] = p; store.set('klab.progress', all); }
-  const instructor = () => !!store.get('klab.instructor', false);
+  // The class copy (lab.py ui --classroom) runs on the instructor's machine: it runs nothing, and every button
+  // gives the command for your own lab host's terminal. Only the instructor has the key, for the answers.
+  const classroom = () => !!(S.status && S.status.classroom);
+  const instructor = () => !!store.get('klab.instructor', false) && (!classroom() || !!KEY);
   const labById = id => (S.cat ? S.cat.labs.find(l => l.id === id) : null);
 
   // ------------------------------------------------------------------ the API
@@ -123,6 +126,7 @@
     if (S.offline) { S.offline = false; renderTop(); }
     let data = {};
     try { data = await r.json(); } catch (e) { /* not JSON */ }
+    if (r.status === 403 && data.error === 'instructor') throw new Error('instructor');
     if (r.status === 403 && data.error === 'key') {
       if (!S.keyProblem) { S.keyProblem = true; render(); }
       throw new Error('key');
@@ -176,6 +180,13 @@
     if (S.offline) { el.append(pill('warn', 'Site not answering', null, 'Is python3 lab.py ui still running?')); return; }
     const st = S.status;
     if (!st) return;
+    const toggle = $('.foot-toggle');
+    if (toggle) toggle.hidden = !!st.classroom && !KEY;
+    if (st.classroom) {
+      el.append(pill('lab', 'Class copy', null, 'Each lab’s commands run in your own lab host’s terminal'));
+      if (KEY) el.append(pill('warn', 'Instructor link', null, 'This link shows the answers: keep it off the projector'));
+      return;
+    }
     const open = st.open_id && labById(st.open_id);
     if (open) el.append(pill('lab', open.label + ' open', '#/lab/' + open.id, 'Go to the open lab'));
     el.append(pill(st.network ? 'good' : '', st.network ? 'Lab network running' : 'Lab network stopped', null,
@@ -239,11 +250,14 @@
     wrap.append(h('div', { class: 'hero' },
       h('div', null,
         h('h1', null, 'Labs'),
-        h('p', null, 'In each lab a customer has a problem and you are the SE. Launch it here, work in your own '
-          + 'Kentik portal, and check your work here. Take them in the order your instructor calls, or any order you like.')),
+        h('p', null, st.classroom
+          ? 'In each lab a customer has a problem and you are the SE. Read it here, run its commands in your lab host’s '
+            + 'terminal, and work in your own Kentik portal. Take them in the order your instructor calls.'
+          : 'In each lab a customer has a problem and you are the SE. Launch it here, work in your own '
+            + 'Kentik portal, and check your work here. Take them in the order your instructor calls, or any order you like.')),
       h('div', { class: 'hero-stats' },
         stat(done + ' of ' + all.length, 'done in this browser'),
-        stat(st.network ? 'Running' : 'Stopped', 'lab network'))));
+        st.classroom ? null : stat(st.network ? 'Running' : 'Stopped', 'lab network'))));
     wrap.append(...homeNotices());
     for (const t of S.cat.tracks) {
       const items = all.filter(l => l.track === t.id);
@@ -257,6 +271,13 @@
   function homeNotices() {
     const st = S.status || {};
     const out = [];
+    if (st.classroom) {
+      out.push(notice('lab', [h('b', null, 'The class copy. '), 'Read each lab here, ask the customer and take hints. '
+        + 'Its commands run in your own lab host’s terminal: each one has a Copy button.']));
+      out.push(notice('', [h('b', null, 'Your portal. '), 'Save your own Kentik email and API token on your lab host, in its terminal: ',
+        h('code', null, 'python3 lab.py portal set')], h('a', { class: 'btn small', href: '#/portal' }, 'How')));
+      return out;
+    }
     const open = st.open_id && labById(st.open_id);
     if (open) {
       out.push(notice('lab', [h('b', null, 'Open now: ' + open.label + ', ' + open.title + (/[.?!]$/.test(open.title) ? ' ' : '. ')),
@@ -331,7 +352,7 @@
       l.hints ? hintCard(l) : null,
       portalCard(l),
       instructor() ? instructorCard(l) : null,
-      h('section', { class: 'card' }, h('h3', null, 'What the host said'),
+      classroom() ? null : h('section', { class: 'card' }, h('h3', null, 'What the host said'),
         h('pre', { class: 'console', id: 'console', 'aria-live': 'polite' }, logLines(l.id))));
     wrap.append(h('div', { class: 'lab-grid' }, mainCol, side));
     return wrap;
@@ -405,7 +426,33 @@
   }
 
   // ---- the panel on the right: run it
+  // A command with what it does, for the class copy's run card.
+  function cmdRow(label, cmd) {
+    return h('div', { class: 'cmd-row' }, h('p', { class: 'cmd-label' }, label), cmdBox(cmd));
+  }
+
+  function classRunCard(l) {
+    const card = h('section', { class: 'card run', id: 'run' }, h('h3', null, 'Run it in your lab host’s terminal'));
+    if (l.engine == null) {
+      card.append(h('p', { class: 'muted' }, 'Nothing to run on your host for this one: it all happens in your portal. Follow the steps.'));
+      return card;
+    }
+    if (l.arm) {
+      card.append(cmdRow('Arm it for tonight, and leave the lab network running', 'sudo python3 lab.py start 9'),
+        cmdRow('Or a dry run that starts in 5 minutes', 'sudo python3 lab.py start 9 --in 5'));
+    } else {
+      card.append(cmdRow(l.engine === 0 ? 'Put the network back to healthy' : 'Open this lab', 'sudo python3 lab.py start ' + l.engine));
+    }
+    if (l.engine > 0) {
+      card.append(cmdRow('Check your work', 'sudo python3 lab.py check'), cmdRow('Back to healthy', 'sudo python3 lab.py start 0'));
+    }
+    card.append(h('p', { class: 'muted small run-note' }, 'First lab of the day? Start the lab network once: ',
+      h('code', null, 'sudo python3 lab.py up'), '. At the end: ', h('code', null, 'sudo python3 lab.py down'), '.'));
+    return card;
+  }
+
   function runCard(l) {
+    if (classroom()) return classRunCard(l);
     const st = S.status || {};
     const card = h('section', { class: 'card run', id: 'run' });
     card.append(h('h3', null, 'Run it on this host'));
@@ -452,7 +499,8 @@
     }
     if (S.root[l.id]) {
       card.append(h('div', { class: 'root-box' },
-        h('p', null, 'The site isn’t running with sudo, so run this in a terminal on this host:'), cmdBox(S.root[l.id])));
+        h('p', null, S.root[l.id].terminal ? 'Run this in your lab host’s terminal:'
+          : 'The site isn’t running with sudo, so run this in a terminal on this host:'), cmdBox(S.root[l.id].cmd)));
     }
     return card;
   }
@@ -487,7 +535,7 @@
     let result = null;
     try {
       result = await api(path, body);
-      if (result.needs_root) S.root[l.id] = result.cmd;
+      if (result.needs_root || result.terminal) S.root[l.id] = { cmd: result.cmd, terminal: !!result.terminal };
       else delete S.root[l.id];
       log(l.id, result.output || (result.ok ? 'Done.' : ''), result.ok ? 'say' : 'err');
       if (after) after(result);
@@ -567,7 +615,13 @@
     const b1 = h('button', { class: 'btn small', type: 'button' }, 'Ask');
     const b2 = h('button', { class: 'btn small', type: 'button' }, 'Ask');
     const who = String(S.cat.customer || '').split(',')[0];
+    const out = h('div', { class: 'tell-out' });
     const send = async (request, question) => {
+      if (classroom()) {                           // nothing runs here: the customer answers in your terminal
+        fill(out, h('p', { class: 'muted small' }, 'Run this in your lab host’s terminal. The customer answers there.'),
+          cmdBox('sudo python3 lab.py tell ' + request.join(' ')));
+        return;
+      }
       const r = await act(l, 'tell', '/api/tell', { request });
       if (r && r.ok) addChat(l, { q: question, a: (r.output || '').replace(new RegExp('^' + who + ':\\s*'), ''), who });
     };
@@ -585,7 +639,8 @@
       h('summary', null, 'Ask the customer to change something'),
       h('div', { class: 'tell-row' }, 'Export to UDP', port, b1),
       h('div', { class: 'tell-row' }, dev, 'exports from', where, b2),
-      h('p', { class: 'muted small' }, 'Only when you know what to ask for. The customer does what you say, right or wrong.'));
+      h('p', { class: 'muted small' }, 'Only when you know what to ask for. The customer does what you say, right or wrong.'),
+      out);
   }
 
   // ---- hints
@@ -656,7 +711,11 @@
           S.answers[l.id] = await api('/api/answer?id=' + encodeURIComponent(l.id));
           const old = $('#answer');
           if (old) old.replaceWith(instructorCard(l));
-        } catch (e) { if (e.message !== 'key') log(l.id, e.message, 'err'); }
+        } catch (e) {
+          if (e.message === 'instructor') fill(b.parentNode, h('h3', null, 'Instructor: the answer'),
+            h('p', { class: 'muted small' }, 'The answers need the instructor link the terminal printed.'));
+          else if (e.message !== 'key') log(l.id, e.message, 'err');
+        }
       });
       card.append(h('p', { class: 'muted small' }, 'Keep this off a shared screen.'), b);
     }
@@ -665,7 +724,28 @@
   }
 
   // ------------------------------------------------------------------ your portal
+  // On the class copy, the portal details stay on each student's own host, entered in its terminal.
+  function classPortalPage() {
+    return h('div', { class: 'narrow' },
+      h('div', { class: 'page-head' }, h('h1', null, 'Your portal'),
+        h('p', null, 'Each of you uses your own Kentik portal and your own API token. They stay on your own lab host, '
+          + 'never on this class copy: the labs read them there.')),
+      h('div', { class: 'two' },
+        h('section', { class: 'card' }, h('h3', null, 'In your lab host’s terminal'),
+          cmdRow('Save your email, API token and region, and test them', 'python3 lab.py portal set'),
+          cmdRow('See what’s saved, and test it again', 'python3 lab.py portal'),
+          cmdRow('Remove them from the host', 'python3 lab.py portal forget')),
+        h('section', { class: 'card' }, h('h3', null, 'Where things stand'),
+          h('ul', { class: 'facts' },
+            h('li', null, h('b', null, 'Kept in: '), h('code', null, '~/.kentik.env'),
+              ' on your lab host, readable only by you. The token never shows again once it’s saved.'),
+            h('li', null, h('b', null, 'Your API token: '), 'from your own user settings in the portal. Ask your instructor if you can’t find it.'),
+            h('li', null, h('b', null, 'What the labs do with it: '), 'today, one read-only call, your device list, to test it. '
+              + 'Next, set each lab up in your portal, and take out what the labs added when you reset.')))));
+  }
+
   function portalPage() {
+    if (classroom()) return classPortalPage();
     const pc = (S.status && S.status.portal) || {};
     const email = h('input', { type: 'email', name: 'email', autocomplete: 'off', value: pc.email || '',
       placeholder: 'you@example.com', required: true, spellcheck: 'false' });
@@ -758,59 +838,66 @@
 
   // ------------------------------------------------------------------ reset
   function resetPage() {
-    if (!S.plans) {
-      Promise.all([api('/api/reset?scope=labs'), api('/api/reset?scope=full')])
-        .then(([labsPlan, full]) => { S.plans = { labs: labsPlan, full }; if (route().page === 'reset') render(true); })
+    if (!S.plan) {
+      api('/api/reset').then(plan => { S.plan = plan; if (route().page === 'reset') render(true); })
         .catch(() => { /* shown by the top bar */ });
-      return h('p', { class: 'loading' }, 'Working out what a reset would take out…');
+      return h('p', { class: 'loading' }, 'Working out what a reset takes out…');
     }
+    const plan = S.plan;
     const r = S.resetResult;
-    return h('div', null,
-      h('div', { class: 'page-head' }, h('h1', null, 'Reset'),
-        h('p', null, 'Take out what the labs added, so a lab can start again from clean. Your Universal Agent stays unless you choose a full wipe.')),
-      r ? resetDone(r) : null,
-      S.plans.labs.note ? notice('warn', S.plans.labs.note) : null,
-      h('div', { class: 'resets' },
-        resetCard('labs', S.plans.labs, 'Reset the labs', 'Keeps your agent, so the next lab starts straight away.', 'Reset the labs'),
-        resetCard('full', S.plans.full, 'Full wipe', 'Everything the labs added, and your agent too: for the end of the class, or a host you give back.', 'Wipe everything')));
-  }
-
-  function resetCard(scope, plan, title, sub, label) {
-    const full = scope === 'full';
-    const confirmBox = full ? h('input', { type: 'text', placeholder: 'Type WIPE', 'aria-label': 'Type WIPE to confirm', spellcheck: 'false' }) : null;
-    const b = h('button', { class: 'btn ' + (full ? 'danger solid' : 'primary'), type: 'button', disabled: full || !!S.busy }, label);
-    if (confirmBox) confirmBox.addEventListener('input', () => { b.disabled = confirmBox.value.trim() !== 'WIPE'; });
-    b.addEventListener('click', async () => {
-      if (!full && !window.confirm('Reset the labs on this host? Your agent stays.')) return;
-      b.disabled = true;
-      fill(b, h('span', { class: 'spin', 'aria-hidden': 'true' }), 'Working…');
-      try {
-        S.resetResult = await api('/api/reset', { scope, confirm: full ? confirmBox.value.trim() : undefined });
+    const lists = [
+      h('p', { class: 'list-h' }, classroom() ? 'On your lab host' : 'On this host'),
+      h('ul', { class: 'list' }, plan.host.map(x => h('li', null, h('span', null, x)))),
+      h('p', { class: 'list-h' }, 'In your portal'),
+      h('ul', { class: 'list portal' }, plan.portal.map(x => h('li', null, h('span', null, cap(x.what), x.how ? h('small', null, x.how) : null)))),
+      h('p', { class: 'list-h' }, 'Stays'),
+      h('ul', { class: 'list keep' }, plan.keep.map(x => h('li', null, h('span', null, x))))];
+    let action;
+    if (classroom()) {
+      const clear = h('button', { class: 'btn', type: 'button' }, 'Clear my progress in this browser');
+      clear.addEventListener('click', () => {
+        if (!window.confirm('Clear the steps you ticked and the labs you marked done, in this browser?')) return;
         store.del('klab.progress');
-        S.hints = {}; S.chats = {}; S.answers = {}; S.root = {};
-      } catch (err) {
-        if (err.message === 'key') return;
-        S.resetResult = { error: err.message };
-      }
-      await poll(true);
-      render();
-      window.scrollTo(0, 0);
-    });
-    return h('section', { class: 'card reset-card' + (full ? ' full' : '') },
-      h('h2', null, title), h('p', null, sub),
-      h('p', { class: 'list-h' }, 'On this host'), h('ul', { class: 'list' }, plan.host.map(x => h('li', null, h('span', null, x)))),
-      h('p', { class: 'list-h' }, 'In your portal'), h('ul', { class: 'list portal' }, plan.portal.map(x =>
-        h('li', null, h('span', null, cap(x.what), x.how ? h('small', null, x.how) : null)))),
-      plan.keep.length ? [h('p', { class: 'list-h' }, 'Stays'), h('ul', { class: 'list keep' }, plan.keep.map(x => h('li', null, h('span', null, x))))] : null,
-      full ? h('div', { class: 'confirm' }, confirmBox, b) : h('div', { class: 'run-row' }, b));
+        S.hints = {}; S.chats = {};
+        S.resetResult = { cleared: true };
+        render();
+      });
+      action = [h('p', { class: 'list-h' }, 'Run it'), cmdRow('In your lab host’s terminal', 'sudo python3 lab.py down'), h('div', { class: 'run-row' }, clear)];
+    } else {
+      const b = h('button', { class: 'btn primary', type: 'button', disabled: !!S.busy }, 'Reset the labs');
+      b.addEventListener('click', async () => {
+        if (!window.confirm('Reset the labs on this host? Your agent stays.')) return;
+        b.disabled = true;
+        fill(b, h('span', { class: 'spin', 'aria-hidden': 'true' }), 'Working…');
+        try {
+          S.resetResult = await api('/api/reset', {});
+          store.del('klab.progress');
+          S.hints = {}; S.chats = {}; S.answers = {}; S.root = {};
+        } catch (err) {
+          if (err.message === 'key') return;
+          S.resetResult = { error: err.message };
+        }
+        await poll(true);
+        render();
+        window.scrollTo(0, 0);
+      });
+      action = h('div', { class: 'run-row' }, b);
+    }
+    return h('div', { class: 'narrow' },
+      h('div', { class: 'page-head' }, h('h1', null, 'Reset'),
+        h('p', null, 'Take out what the labs added, so a lab can start again from clean. Your Universal Agent always stays: the labs need it.')),
+      r ? resetDone(r) : null,
+      plan.note ? notice('warn', plan.note) : null,
+      h('section', { class: 'card reset-card' }, lists, action));
   }
 
   function resetDone(r) {
     if (r.error) return notice('bad', [h('b', null, 'The reset didn’t run. '), r.error]);
+    if (r.cleared) return notice('', [h('b', null, 'Cleared. '), 'Your progress in this browser is gone. Stop the lab network in your host’s terminal, and take the portal items out by hand.']);
     const host = r.host || {};
     const plan = r.plan || { portal: [] };
     return h('section', { class: 'card reset-done' },
-      h('h3', null, plan.scope === 'full' ? 'Full wipe: what happened' : 'Reset: what happened'),
+      h('h3', null, 'Reset: what happened'),
       host.needs_root ? [h('p', null, 'The site isn’t running with sudo, so stop the lab network yourself:'), cmdBox(host.cmd)]
         : h('pre', { class: 'console' }, host.output || 'The lab network is stopped.'),
       h('p', null, 'Progress in this browser is cleared. ' + (plan.writes ? '' : 'Now take these out of your portal by hand:')),
@@ -825,7 +912,8 @@
           + 'When you started the site, the terminal printed a link with the key in it: open that link. '
           + 'If you started the site again since, the key changed, so use the new link.')),
       h('section', { class: 'card' }, h('h3', null, 'Start the site'),
-        h('p', null, 'On your lab host, in the kentik-training-labs folder:'), cmdBox('sudo python3 lab.py ui')));
+        h('p', null, 'On your lab host, in the kentik-training-labs folder:'), cmdBox('sudo python3 lab.py ui'),
+        h('p', { class: 'muted small' }, 'In a class, your instructor may run a class copy for the room: open the address they give you.')));
   }
 
   function offlinePage() {
@@ -918,7 +1006,6 @@
       $('#main').focus({ preventScroll: true });
     });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !S.keyProblem) poll(); });
-    if (S.keyProblem) { render(); return; }
     try {
       const [cat, st] = await Promise.all([api('/api/catalog'), api('/api/status')]);
       S.cat = cat;

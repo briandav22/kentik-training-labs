@@ -1,4 +1,4 @@
-"""Your Kentik portal, as the lab site sees it: the connection details, and what a reset would take out.
+"""Your Kentik portal, as the labs see it: the connection details, and what a reset takes out.
 
 A first pass (Nov 20, 2026). Brian: "The crux is going to be API creds and emails, as a placeholder let's put
 that in the UI you build and figure it out later." So the site keeps the portal's email, API token and region
@@ -9,6 +9,8 @@ remove by hand, and does the host's part of a reset for real.
 
 The details live in ~/.kentik.env (of the user who ran sudo, if anyone did), readable only by that user, as
 Brian's other labs keep them. They never go in the repo, and the site never sends the token back to a page.
+Each student uses their own API token (Brian, Nov 21, 2026). On a host with only a terminal, `python3 lab.py
+portal set` saves them; the site's "Your portal" page does the same where a browser can reach the host.
 """
 import json
 import os
@@ -169,8 +171,9 @@ def _last_test() -> Dict:
     return state.read_json("portal-test.json")
 
 
-def plan(scope: str) -> Dict:
-    """What a reset would do, on this host and in the portal. scope: 'labs' (keeps the agent) or 'full'."""
+def plan() -> Dict:
+    """What a reset does, on this host and in the portal. The Universal Agent always stays: the labs need it, and
+    reinstalling one is a chore (Brian, Nov 21, 2026: most labs will always have one)."""
     host = ["Stop the lab network: the devices' addresses on loopback, the background sender, the lab's firewall "
             "rule and its SNMP lines come off this host (the same as lab.py down)",
             "Clear the site's progress: steps ticked and labs marked done"]
@@ -179,14 +182,9 @@ def plan(scope: str) -> Dict:
         for a in lab["adds"]:
             if a not in seen and a != "agent":
                 seen.append(a)
-    portal = [{"what": catalog.ADDS[a], "kind": a, "how": _how(a)} for a in seen]
-    keep = ["Your Universal Agent, installed and authorized, so the next lab starts straight away"]
-    if scope == "full":
-        portal.append({"what": catalog.ADDS["agent"], "kind": "agent",
-                       "how": "In the portal, remove the agent; then uninstall it from this host with the steps from "
-                              "your portal. Kentik SE team: confirm an API call for this."})
-        keep = []
-    return {"scope": scope, "host": host, "portal": portal, "keep": keep, "writes": PORTAL_WRITES,
+    return {"host": host, "portal": [{"what": catalog.ADDS[a], "kind": a, "how": _how(a)} for a in seen],
+            "keep": ["Your Universal Agent, installed and authorized, so the next lab starts straight away"],
+            "writes": PORTAL_WRITES,
             "note": "" if PORTAL_WRITES else
             "The portal part is a list for now: the site doesn't change your portal yet. Remove these by hand; "
             "the next version does it for you."}

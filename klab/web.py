@@ -7,6 +7,11 @@ Safety: it listens on 127.0.0.1 unless told otherwise, every API call needs the 
 (so another page open in the browser can't drive it), the Host header must be this server's (so a web page
 can't reach it through DNS tricks), and it only serves files from klab/ui. Launching labs needs root, as the
 commands do: run it with sudo, or the site shows the command to run instead.
+
+The class copy (lab.py ui --classroom) is for lab hosts with only a terminal (Brian, Nov 21, 2026: the Launchpad
+host has a Linux terminal, no browser). The instructor runs it next to the course; the room reads the labs,
+asks the customer and takes hints there, and every button shows the command to run in their own host's
+terminal. It runs nothing and keeps nothing: no lab state, no portal details. Only the answers need the key.
 """
 import argparse
 import base64
@@ -30,6 +35,11 @@ from . import catalog, cli, labs, portal, site, state, system
 
 UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 LOCK = threading.Lock()                      # one lab action at a time, as in one terminal
+
+# What the class copy answers without the key: the labs themselves, and the commands to run on your own host.
+CLASS_OPEN = {("GET", "/api/catalog"), ("GET", "/api/status"), ("GET", "/api/hint"), ("GET", "/api/reset"),
+              ("POST", "/api/ask"), ("POST", "/api/launch"), ("POST", "/api/check"), ("POST", "/api/healthy"),
+              ("POST", "/api/stop"), ("POST", "/api/tell"), ("POST", "/api/reset")}
 
 
 def is_root() -> bool:
@@ -86,6 +96,25 @@ def status() -> Dict:
     }
 
 
+def class_status() -> Dict:
+    """The class copy's status: it runs no lab, so there is nothing of this machine's to report."""
+    return {"classroom": True, "root": False, "linux": True, "network": False, "open": 0, "open_id": None,
+            "open_title": None, "case": None, "listening": False, "agent_port": site.AGENT_PORT, "sending_for": 0,
+            "portal": None}
+
+
+def terminal(cmd: str) -> Dict:
+    """The answer to a button on the class copy: what to run in your own lab host's terminal."""
+    return {"ok": False, "terminal": True, "cmd": cmd, "output": "Run this in your lab host's terminal:\n  " + cmd}
+
+
+def start_cmd(lab: Dict, when: Optional[str] = None) -> str:
+    n = lab["engine"]
+    if n == 9 and when == "soon":
+        return "sudo python3 lab.py start 9 --in 5"
+    return "sudo python3 lab.py start %d" % n
+
+
 def launch(lab: Dict, when: Optional[str] = None) -> Dict:
     """Start a lab the way its steps do: the network first if it isn't up, then lab.py start."""
     n = lab["engine"]
@@ -116,6 +145,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     server_version = "klab"
     key = ""
     hosts = set()
+    classroom = False
 
     def log_message(self, fmt, *args):                 # quiet: the terminal stays readable
         pass
@@ -140,6 +170,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """This server's own name or an address, on its own port. A name that isn't ours is how a web page
         reaches a local server through DNS tricks, so it's refused; a plain address can't be used that way,
         and lets a laptop open the site on a host started with --host 0.0.0.0."""
+        if self.classroom:                       # nothing on the class copy is private but the answers, behind the key
+            return True
         host = (self.headers.get("Host") or "").lower()
         if host in self.hosts:
             return True
@@ -156,6 +188,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         given = (self.headers.get("X-Lab-Key") or "").encode("utf-8")
         return hmac.compare_digest(given, self.key.encode("utf-8"))
 
+    def _allowed(self, method: str, path: str) -> bool:
+        return self._key_ok() or (self.classroom and (method, path) in CLASS_OPEN)
+
     def _body(self) -> Dict:
         try:
             n = min(int(self.headers.get("Content-Length") or 0), 65536)
@@ -170,8 +205,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(403, {"error": "Wrong host"})
         url = urllib.parse.urlsplit(self.path)
         if url.path.startswith("/api/"):
-            if not self._key_ok():
-                return self._json(403, {"error": "key"})
+            if not self._allowed("GET", url.path):
+                return self._json(403, {"error": "instructor" if self.classroom else "key"})
             return self._api("GET", url.path, dict(urllib.parse.parse_qsl(url.query)), {})
         self._static(url.path)
 
@@ -179,8 +214,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._json(403, {"error": "Wrong host"})
         url = urllib.parse.urlsplit(self.path)
-        if not url.path.startswith("/api/") or not self._key_ok():
-            return self._json(403, {"error": "key"})
+        if not url.path.startswith("/api/") or not self._allowed("POST", url.path):
+            return self._json(403, {"error": "instructor" if self.classroom else "key"})
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             return self._json(415, {"error": "JSON only"})
         self._api("POST", url.path, {}, self._body())
@@ -201,6 +236,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _api(self, method: str, path: str, q: Dict, body: Dict) -> None:
         route = (method, path)
         lab = catalog.by_id(body.get("id") or q.get("id") or "")
+        if self.classroom and self._class_api(route, lab, body):
+            return
         if route == ("GET", "/api/catalog"):
             return self._json(200, catalog.catalog())
         if route == ("GET", "/api/status"):
@@ -221,7 +258,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if route == ("GET", "/api/portal"):
             return self._json(200, portal.public(portal.load()))
         if route == ("GET", "/api/reset"):
-            return self._json(200, portal.plan("full" if q.get("scope") == "full" else "labs"))
+            return self._json(200, portal.plan())
         if route == ("POST", "/api/ask"):
             topic = body.get("topic")
             if not lab or topic not in labs.QUESTIONS:
@@ -262,10 +299,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             portal.forget()
             return self._json(200, portal.public(portal.load()))
         if route == ("POST", "/api/reset"):
-            scope = "full" if body.get("scope") == "full" else "labs"
-            if scope == "full" and body.get("confirm") != "WIPE":
-                return self._json(400, {"error": "Type WIPE to confirm a full wipe."})
-            result = {"plan": portal.plan(scope), "host": None}
+            result = {"plan": portal.plan(), "host": None}
             if is_root():
                 result["host"] = run(cli.cmd_down)
             else:
@@ -273,6 +307,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   "output": "Run this in a terminal to stop the lab network:\n  sudo python3 lab.py down"}
             return self._json(200, result)
         self._json(404, {"error": "No such call"})
+
+    def _class_api(self, route: Tuple[str, str], lab: Optional[Dict], body: Dict) -> bool:
+        """The class copy runs nothing: a button answers with the command for your own host. True if answered."""
+        method, path = route
+        if route == ("GET", "/api/status"):
+            self._json(200, class_status())
+        elif path.startswith("/api/portal"):
+            self._json(400, {"error": "Your portal details stay on your own lab host. In its terminal: "
+                                      "python3 lab.py portal set"})
+        elif route == ("POST", "/api/launch"):
+            if not lab:
+                self._json(404, {"error": "No such lab"})
+            elif lab["engine"] is None:
+                self._json(200, {"ok": True, "output": "Nothing to launch on your host for this one: follow its steps."})
+            else:
+                self._json(200, terminal(start_cmd(lab, body.get("when"))))
+        elif route == ("POST", "/api/check"):
+            self._json(200, terminal("sudo python3 lab.py check"))
+        elif route == ("POST", "/api/healthy"):
+            self._json(200, terminal("sudo python3 lab.py start 0"))
+        elif route in (("POST", "/api/stop"), ("POST", "/api/reset")):
+            out = terminal("sudo python3 lab.py down")
+            self._json(200, {"plan": portal.plan(), "host": out} if path == "/api/reset" else out)
+        elif route == ("POST", "/api/tell"):
+            self._json(200, terminal("sudo python3 lab.py tell " + " ".join(str(x) for x in (body.get("request") or [])[:3])))
+        else:
+            return False
+        return True
 
 
 def new_key() -> str:
@@ -298,8 +360,8 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     allow_reuse_address = True
 
 
-def make_server(host: str, port: int, key: str) -> Server:
-    handler = type("LabHandler", (Handler,), {})
+def make_server(host: str, port: int, key: str, classroom: bool = False) -> Server:
+    handler = type("LabHandler", (Handler,), {"classroom": classroom})
     httpd = Server((host, port), handler)
     real_port = httpd.server_address[1]
     names = {"127.0.0.1", "localhost", host}
@@ -308,14 +370,27 @@ def make_server(host: str, port: int, key: str) -> Server:
     return httpd
 
 
-def serve(host: str = "127.0.0.1", port: int = 8090, key: Optional[str] = None, open_browser: bool = False) -> int:
+def serve(host: str = "127.0.0.1", port: int = 8090, key: Optional[str] = None, open_browser: bool = False,
+          classroom: bool = False) -> int:
     key = key or os.environ.get("KLAB_KEY") or new_key()
     try:
-        httpd = make_server(host, port, key)
+        httpd = make_server(host, port, key, classroom)
     except OSError as e:
         print("Can't start the lab site on %s:%d: %s" % (host, port, e.strerror), file=sys.stderr)
         return 1
     port = httpd.server_address[1]
+    if classroom:
+        lan = (_lan_address() or "127.0.0.1") if host in ("0.0.0.0", "") else host
+        print("The class copy of the lab site is running.\n\nFor the room (no key needed):\n\n  http://%s:%d/\n\n"
+              "For you, with the answers (keep this link to yourself):\n\n  http://%s:%d/?key=%s\n\n"
+              "Students run each lab's commands in their own lab host's terminal.\nCtrl-C to stop." % (lan, port, lan, port, key))
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            httpd.server_close()
+        return 0
     shown = "127.0.0.1" if host in ("0.0.0.0", "") else host
     url = "http://%s:%d/?key=%s" % (shown, port, key)
     print("The lab site is running. Open:\n\n  %s\n" % url)
