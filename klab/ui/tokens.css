@@ -1,0 +1,190 @@
+/* Copied from the course (kentik-training: public/css/tokens.css) so the lab site looks like it. Keep them in step. */
+/* Design tokens: colors, type sizes and spacing. Light mode by default, dark via the
+   system setting or the theme button (data-theme on <html>). Color meaning is fixed across
+   the course: devices teal, users and external gray, servers and cloud blue, Kentik and flow
+   records purple, requests blue dots, replies green dots, problems red, warnings amber. */
+
+:root {
+  color-scheme: light;
+  --bg: #FAF9F5;
+  --surface-0: #F0EEE6;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --text: #1F1E1D;
+  --text-2: #55544F;
+  --text-3: #6F6E69;
+  --border: rgba(0, 0, 0, .12);
+  --border-strong: rgba(0, 0, 0, .25);
+  --link: #888780;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .12);
+  --scrim: rgba(31, 30, 29, .28);
+
+  /* Color ramps: f = fill, s = stroke, h = heading text, t = secondary text */
+  --gray-f: #F1EFE8; --gray-s: #5F5E5A; --gray-h: #444441; --gray-t: #5F5E5A;
+  --teal-f: #E1F5EE; --teal-s: #0F6E56; --teal-h: #085041; --teal-t: #0F6E56;
+  --purple-f: #EEEDFE; --purple-s: #534AB7; --purple-h: #3C3489; --purple-t: #534AB7;
+  --blue-f: #E6F1FB; --blue-s: #185FA5; --blue-h: #0C447C; --blue-t: #185FA5;
+  --red-f: #FCEBEB; --red-s: #A32D2D; --red-h: #791F1F; --red-t: #A32D2D;
+  --amber-f: #FAEEDA; --amber-s: #854F0B; --amber-h: #633806; --amber-t: #854F0B;
+  --green-f: #EAF3DE; --green-s: #3B6D11; --green-h: #27500A; --green-t: #3B6D11;
+  --coral-f: #FAECE7; --coral-s: #993C1D; --coral-h: #712B13; --coral-t: #993C1D;
+  --road: #E3E0D6; --road-line: #FFFFFF; /* roads in the roads and cars opener (phone-records) */
+
+  /* Mid tones that read on both backgrounds: dots, squares, bars, dashed export lines */
+  --c-purple: #7F77DD;
+  --c-blue: #378ADD;
+  --c-green: #639922;
+  --c-red: #E24B4A;
+  --c-amber: #EF9F27;
+  --c-coral: #D85A30;
+  --c-teal: #1D9E75;
+  --c-gray: #888780;
+
+  --accent: #534AB7;
+  --accent-hover: #463EA0;
+  --accent-text: #3C3489;
+  --on-accent: #FFFFFF;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --fs-title: clamp(24px, 1.2vw + 13px, 31px);
+  --fs-lead: 17px;
+  --fs-step-title: 21px;
+  --fs-body: 17px;
+  --fs-ui: 15px;
+  --fs-small: 14px;
+  --fs-tiny: 13px;
+
+  --story-w: clamp(360px, 30vw, 440px);
+}
+
+@media (min-height: 860px) {
+  :root { --fs-body: 18px; --fs-step-title: 22px; --fs-lead: 18px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1F1E1D;
+    --surface-0: #262624;
+    --surface-1: #2B2A27;
+    --surface-2: #30302E;
+    --text: #F0EEE6;
+    --text-2: #C9C7BE;
+    --text-3: #A6A49B;
+    --border: rgba(255, 255, 255, .12);
+    --border-strong: rgba(255, 255, 255, .25);
+    --link: #9C9A92;
+    --shadow: 0 8px 30px rgba(0, 0, 0, .45);
+    --scrim: rgba(0, 0, 0, .45);
+    --gray-f: #444441; --gray-s: #B4B2A9; --gray-h: #E3E1D8; --gray-t: #C4C2B9;
+    --teal-f: #085041; --teal-s: #5DCAA5; --teal-h: #BDEBDA; --teal-t: #7FD8B8;
+    --purple-f: #3C3489; --purple-s: #AFA9EC; --purple-h: #DDDAF9; --purple-t: #BFBAF0;
+    --blue-f: #0C447C; --blue-s: #85B7EB; --blue-h: #CFE3F8; --blue-t: #A2C8F0;
+    --red-f: #791F1F; --red-s: #F09595; --red-h: #FAD4D4; --red-t: #F4AEAE;
+    --amber-f: #633806; --amber-s: #EF9F27; --amber-h: #FBD9A0; --amber-t: #F3B65A;
+    --green-f: #27500A; --green-s: #97C459; --green-h: #D3E9B5; --green-t: #ADD17C;
+    --coral-f: #712B13; --coral-s: #F0997B; --coral-h: #F8D2C4; --coral-t: #F3AE96;
+    --road: #3D3C39; --road-line: #6B6963;
+    --accent: #6C63D0;
+    --accent-hover: #7D75DA;
+    --accent-text: #CECBF6;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1F1E1D;
+  --surface-0: #262624;
+  --surface-1: #2B2A27;
+  --surface-2: #30302E;
+  --text: #F0EEE6;
+  --text-2: #C9C7BE;
+  --text-3: #A6A49B;
+  --border: rgba(255, 255, 255, .12);
+  --border-strong: rgba(255, 255, 255, .25);
+  --link: #9C9A92;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .45);
+  --scrim: rgba(0, 0, 0, .45);
+  --gray-f: #444441; --gray-s: #B4B2A9; --gray-h: #E3E1D8; --gray-t: #C4C2B9;
+  --teal-f: #085041; --teal-s: #5DCAA5; --teal-h: #BDEBDA; --teal-t: #7FD8B8;
+  --purple-f: #3C3489; --purple-s: #AFA9EC; --purple-h: #DDDAF9; --purple-t: #BFBAF0;
+  --blue-f: #0C447C; --blue-s: #85B7EB; --blue-h: #CFE3F8; --blue-t: #A2C8F0;
+  --red-f: #791F1F; --red-s: #F09595; --red-h: #FAD4D4; --red-t: #F4AEAE;
+  --amber-f: #633806; --amber-s: #EF9F27; --amber-h: #FBD9A0; --amber-t: #F3B65A;
+  --green-f: #27500A; --green-s: #97C459; --green-h: #D3E9B5; --green-t: #ADD17C;
+  --coral-f: #712B13; --coral-s: #F0997B; --coral-h: #F8D2C4; --coral-t: #F3AE96;
+  --road: #3D3C39; --road-line: #6B6963;
+  --accent: #6C63D0;
+  --accent-hover: #7D75DA;
+  --accent-text: #CECBF6;
+}
+
+/* Infoblox colors: an option, switched with the "Infoblox colors" button in the top bar
+   (data-brand="infoblox" on <html>). Infoblox's rebrand centers on a primary green and black
+   (Infoblox blog, "The story behind the rebrand"); green #8CD21E and Regal Blue #014369 are as
+   listed by Brandfetch, Nov 13, 2026. Approximate: confirm against the Infoblox partner brand
+   guidelines before using this outside the talk. Only the brand accent (Kentik's purple), the
+   blues and the neutrals change; red, amber and green keep their meaning. Green text and lines use
+   darker shades of the brand green so they read on white; buttons are brand green with black text. */
+:root[data-brand="infoblox"] {
+  --bg: #F5F6F3;
+  --surface-0: #EAEDE6;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --text: #101210;
+  --text-2: #3F443B;
+  --text-3: #61675B;
+  --road: #DFE3DA; --road-line: #FFFFFF;
+  --purple-f: #EDF7DC; --purple-s: #5A9512; --purple-h: #284605; --purple-t: #477A0B;
+  --blue-f: #E4EEF5; --blue-s: #0B5A8A; --blue-h: #014369; --blue-t: #0B5A8A;
+  --c-purple: #8CD21E;
+  --c-blue: #2D7DB8;
+  --accent: #8CD21E;
+  --accent-hover: #7CBD16;
+  --accent-text: #284605;
+  --on-accent: #101210;
+}
+
+:root[data-brand="infoblox"][data-theme="dark"] {
+  --bg: #0B0C0A;
+  --surface-0: #121411;
+  --surface-1: #161915;
+  --surface-2: #1C1F1A;
+  --text: #F1F4EC;
+  --text-2: #C8CEC0;
+  --text-3: #9AA192;
+  --road: #2C302A; --road-line: #5A6055;
+  --purple-f: #213508; --purple-s: #8CD21E; --purple-h: #D4F1A3; --purple-t: #A9DE55;
+  --blue-f: #0B3049; --blue-s: #6FA8CF; --blue-h: #CFE4F3; --blue-t: #9CC4E0;
+  --c-purple: #8CD21E;
+  --c-blue: #4B93C8;
+  --accent: #8CD21E;
+  --accent-hover: #9CDB3A;
+  --accent-text: #C6EC86;
+  --on-accent: #0B0C0A;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-brand="infoblox"]:not([data-theme="light"]) {
+    --bg: #0B0C0A;
+    --surface-0: #121411;
+    --surface-1: #161915;
+    --surface-2: #1C1F1A;
+    --text: #F1F4EC;
+    --text-2: #C8CEC0;
+    --text-3: #9AA192;
+    --road: #2C302A; --road-line: #5A6055;
+    --purple-f: #213508; --purple-s: #8CD21E; --purple-h: #D4F1A3; --purple-t: #A9DE55;
+    --blue-f: #0B3049; --blue-s: #6FA8CF; --blue-h: #CFE4F3; --blue-t: #9CC4E0;
+    --c-purple: #8CD21E;
+    --c-blue: #4B93C8;
+    --accent: #8CD21E;
+    --accent-hover: #9CDB3A;
+    --accent-text: #C6EC86;
+    --on-accent: #0B0C0A;
+  }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kentik labs</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Kentik labs</span><span class="brand-sub">Training</span></a>
+  <nav class="top-nav" aria-label="Main">
+    <a href="#/" data-nav="home">All labs</a>
+    <a href="#/portal" data-nav="portal">Your portal</a>
+    <a href="#/reset" data-nav="reset">Reset</a>
+  </nav>
+  <div class="top-status" id="topStatus" aria-live="polite"></div>
+  <div class="top-tools">
+    <button class="btn ghost" type="button" id="btnBrand" title="Switch color scheme">Infoblox colors</button>
+    <button class="btn ghost" type="button" id="btnTheme" title="Switch light or dark">Dark</button>
+  </div>
+</header>
+<main id="main" tabindex="-1"></main>
+<footer class="foot">
+  <span>Every name, address and number in these labs is made up. Each lab plays the customer; you're the SE.</span>
+  <label class="foot-toggle"><input type="checkbox" id="instructor"> Instructor view</label>
+</footer>
+<script src="art.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

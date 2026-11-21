@@ -342,6 +342,12 @@ def cmd_listen(args) -> int:
     return 0
 
 
+def cmd_ui(args) -> int:
+    """The lab site: every lab as a tile, launched from the browser."""
+    from . import web
+    return web.serve(host=args.host, port=args.port, key=args.key, open_browser=args.open)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="lab.py", description="Kentik training labs: a made-up network on this host.")
     sub = p.add_subparsers(dest="cmd")
@@ -372,6 +378,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("n", nargs="?", type=int, default=1)
     s.set_defaults(fn=cmd_hint)
     sub.add_parser("check", help="is the open lab solved?").set_defaults(fn=cmd_check)
+    s = sub.add_parser("ui", help="the lab site in your browser (sudo to launch labs from it)")
+    s.add_argument("--port", type=int, default=8090)
+    s.add_argument("--host", default="127.0.0.1", help="where to listen (default 127.0.0.1: this host only)")
+    s.add_argument("--key", help="the key in the link (default: a new one each time)")
+    s.add_argument("--open", action="store_true", help="open it in this host's browser")
+    s.set_defaults(fn=cmd_ui)
     s = sub.add_parser("listen", help="a stand-in for the agent, for testing")
     s.add_argument("--port", type=int, default=site.AGENT_PORT)
     s.add_argument("--seconds", type=float, default=0)
