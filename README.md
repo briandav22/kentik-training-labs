@@ -32,9 +32,47 @@ sudo python3 lab.py start 1     # open the first lab and read its ticket
 | `sudo python3 lab.py check` | Tells you whether the lab is solved on this host |
 | `python3 lab.py snmp test <community>` | Lab 11: asks this host its name over SNMP, the way the agent would |
 | `python3 lab.py status` | Whether the network is running and which lab is open |
+| `python3 lab.py portal set` | Saves your Kentik email, API token and region on this host, and tests them |
+| `sudo python3 lab.py ui` | The lab site on this host (see below); `python3 lab.py ui --classroom` is the class copy |
 | `sudo python3 lab.py down` | Stops everything and cleans up the host |
 
 Commands that change something need `sudo`. Leave the network running between labs: your portal gets more useful the longer it collects.
+
+## The lab site
+
+Every lab is also a page in a browser: its ticket, its steps, the customer to ask, hints, and the commands to run. There are two ways to use it.
+
+**In class, from the instructor's laptop** (for lab hosts with only a terminal, such as the Launchpad hosts). The instructor runs the class copy next to the course:
+
+```bash
+python3 lab.py ui --classroom   # prints a link for the room, and one with a key for you
+```
+
+- Students open the room's link. They read each lab there, ask the customer and take hints, and copy each command into their own lab host's terminal: `sudo python3 lab.py start 2`, `sudo python3 lab.py check`, and so on.
+- The class copy runs nothing and keeps no one's portal details. Only the instructor's link, with the key, shows the answers (**Instructor view**, at the foot of the page).
+- It needs no sudo and runs on any machine with Python 3, a Mac included.
+
+**On the lab host itself**, where a browser can reach it:
+
+```bash
+sudo python3 lab.py ui          # prints a link with a key in it: open it in a browser
+```
+
+- On a lab's page, **Launch this lab** runs `lab.py up` (if the network isn't running) and `lab.py start <n>`. **Check my work** is `lab.py check`, **Back to healthy** is `start 0`, and **Stop the lab network** is `lab.py down`. What the host prints shows on the page.
+- It listens on `127.0.0.1` only, and every call must carry the key from the link. To use it from a laptop: `ssh -L 8090:127.0.0.1:8090 <you>@<lab host>` and open the same link, or start it with `--host 0.0.0.0`, which prints a link with the host's address (anyone with that link who can reach the host can use it).
+- Started without `sudo`, it shows every lab and gives you the command to run instead of launching.
+
+**Your portal.** Each student uses their own Kentik portal and their own API token. Save them on your lab host, in its terminal:
+
+```bash
+python3 lab.py portal set       # your email, API token (hidden as you type) and region; then a read-only test
+```
+
+`python3 lab.py portal` shows what's saved and tests it again; `python3 lab.py portal forget` removes it. They're kept in `~/.kentik.env`, readable only by you, and never shown again: a page sees only the token's last four characters. The labs don't change your portal yet: adding each lab's devices for you and removing them on reset come next (`PORTAL_WRITES` in `klab/portal.py`).
+
+**Reset** stops the lab network (`sudo python3 lab.py down`) and lists what the labs added to your portal, for you to remove by hand for now. Your Universal Agent always stays: the labs need it.
+
+Steps you tick and labs you mark done are kept in your browser. Marking a lab done shows its takeaway.
 
 ## The network
 
@@ -77,6 +115,7 @@ Kentik tells devices apart by the address their flow comes from. `lab.py up` add
 - `python3 lab.py status --reveal` shows what each lab has really changed. It gives the lab away.
 - `python3 lab.py agent` prints the Universal Agent's own status page (seen on agent 5.0.29: plain text on `127.0.0.1:9996`). It lists the sending addresses the agent hears from and which of them match no device in Kentik, which makes labs 1 and 3 visible. How quickly it updates after a device is added is not known yet.
 - `python3 lab.py listen` is a stand-in for the agent: it prints the flow that arrives on a port. Useful for trying a lab without a portal.
+- On the lab site, **Instructor view** (at the foot of every page) adds each lab's answer to its page, and for the open lab what `status --reveal` shows. On the class copy it needs your link with the key; on a student's own host anyone can turn it on, so keep it off a shared screen.
 - Tests: `python3 -m unittest discover -s tests`
 
 ## Status
