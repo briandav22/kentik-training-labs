@@ -36,6 +36,30 @@ sudo python3 lab.py start 1     # open the first lab and read its ticket
 
 Commands that change something need `sudo`. Leave the network running between labs: your portal gets more useful the longer it collects.
 
+## The lab site
+
+Every lab is also a page in your browser: its ticket, its steps, the customer to ask, hints, and buttons that launch it and check your work.
+
+```bash
+sudo python3 lab.py ui          # prints a link with a key in it: open it in a browser
+```
+
+- **All labs** shows a tile per lab, by track: get set up, get flow into Kentik, ask the data, cases, beyond flow. The course pauses at each lab and sends the room here; open the tile your instructor names.
+- On a lab's page, **Launch this lab** runs `lab.py up` (if the network isn't running) and `lab.py start <n>`. **Check my work** is `lab.py check`, **Back to healthy** is `start 0`, and **Stop the lab network** is `lab.py down`. What the host prints shows on the page. **Ask the customer** and **Hints** work as `ask` and `hint` do; on labs 1 to 5 you can also ask the customer to change something (`tell`).
+- **Your portal** keeps your Kentik email, API token and region on this host, in `~/.kentik.env`, readable only by you, and tests them with one read-only call: the device list. The token is never shown again: the page sees only its last four characters. The site doesn't change your portal yet: adding each lab's devices for you and removing them on reset come next (`PORTAL_WRITES` in `klab/portal.py`).
+- **Reset** stops the lab network, clears the progress kept in your browser, and lists what the labs added to your portal, for you to remove by hand for now. Your Universal Agent stays, unless you choose **Full wipe** and type WIPE.
+- Steps you tick and labs you mark done are kept in your browser. Marking a lab done shows its takeaway.
+
+The site listens on `127.0.0.1` only, and every call must carry the key from the link, so other pages in your browser can't drive it. Started without `sudo`, it shows every lab and gives you the command to run instead of launching.
+
+No browser on the lab host? Either open a tunnel from your laptop and use the same link there:
+
+```bash
+ssh -L 8090:127.0.0.1:8090 <you>@<lab host>
+```
+
+or start the site with `sudo python3 lab.py ui --host 0.0.0.0`, which also prints a link with the host's address. Anyone who has that link and can reach the host can use it, so keep it to yourself.
+
 ## The network
 
 | Device | Sends flow from | Interfaces |
@@ -77,6 +101,7 @@ Kentik tells devices apart by the address their flow comes from. `lab.py up` add
 - `python3 lab.py status --reveal` shows what each lab has really changed. It gives the lab away.
 - `python3 lab.py agent` prints the Universal Agent's own status page (seen on agent 5.0.29: plain text on `127.0.0.1:9996`). It lists the sending addresses the agent hears from and which of them match no device in Kentik, which makes labs 1 and 3 visible. How quickly it updates after a device is added is not known yet.
 - `python3 lab.py listen` is a stand-in for the agent: it prints the flow that arrives on a port. Useful for trying a lab without a portal.
+- On the lab site, **Instructor view** (at the foot of every page) adds each lab's answer to its page, and for the open lab what `status --reveal` shows. Anyone can turn it on, so it's an honor system: keep it off a shared screen.
 - Tests: `python3 -m unittest discover -s tests`
 
 ## Status
